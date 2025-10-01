@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4baeaad008e3cd84ba8cec04cfa6ccc1, type: 3}
   m_Name: PVE
   m_EditorClassIdentifier: 
-  id: 0
+  id: 3
   displayName: Reino
   color: {r: 1, g: 1, b: 1, a: 1}
   banner: {fileID: 0}
