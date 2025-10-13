@@ -1,6 +1,7 @@
-using System;
+﻿using System;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.EventSystems; // << precisa disso para IsPointerOverGameObject()
 
 public class InputSelection : MonoBehaviour
 {
@@ -28,21 +29,22 @@ public class InputSelection : MonoBehaviour
     public event Action<Unit, bool, bool> OnClickUnit;
     public event Action<Unit> OnDoubleClickUnit;
     public event Action<Vector3, bool, bool> OnClickGround;
+
     public bool IsCtrlPressed => ctrl != null && ctrl.action.IsPressed();
     public bool IsShiftPressed => shift != null && shift.action.IsPressed();
-
 
     Vector2 _pointer;
     bool _lmbDown;
     Vector2 _downPos;
     bool _dragging;
 
+    bool _pressedOverUI;           // << NOVO: começou sobre UI?
     float _lastClickTime;
     Unit _lastClickedUnit;
+    bool _overUIThisFrame;
 
     void OnEnable()
     {
-        // habilita actions
         point?.action.Enable();
         lmb?.action.Enable();
         rmb?.action.Enable();
@@ -60,7 +62,7 @@ public class InputSelection : MonoBehaviour
         point.action.performed -= OnPointPerformed;
         lmb.action.started -= OnLmbStarted;
         lmb.action.canceled -= OnLmbCanceled;
-        rmb.action.performed -= OnRmbPerformed; 
+        rmb.action.performed -= OnRmbPerformed;
 
         point?.action.Disable();
         lmb?.action.Disable();
@@ -69,16 +71,13 @@ public class InputSelection : MonoBehaviour
         shift?.action.Disable();
     }
 
-    void OnPointPerformed(InputAction.CallbackContext ctx)
+    private void LateUpdate()
     {
-        _pointer = ctx.ReadValue<Vector2>();
-        if (_lmbDown && _dragging)
-            OnDragging?.Invoke(_pointer);
+        _overUIThisFrame = ComputePointerOverUI();
     }
-
     void Update()
     {
-        if (_lmbDown && !_dragging &&
+        if (_lmbDown && !_dragging && !_pressedOverUI &&
             Vector2.Distance(_downPos, _pointer) >= dragThresholdPx)
         {
             _dragging = true;
@@ -86,17 +85,38 @@ public class InputSelection : MonoBehaviour
         }
     }
 
+    void OnPointPerformed(InputAction.CallbackContext ctx)
+    {
+        // Ignora LMB iniciado sobre UI
+        if (IsPointerOverUI()) return;      // usa o cache -> some o warning
+        _pointer = ctx.ReadValue<Vector2>();
+        if (_lmbDown && _dragging && !_pressedOverUI)
+            OnDragging?.Invoke(_pointer);
+    }
     void OnLmbStarted(InputAction.CallbackContext _)
     {
         _lmbDown = true;
         _downPos = _pointer;
+
+        // <<< NOVO: trava tudo se o clique começou sobre UI
+        _pressedOverUI = IsPointerOverUI();
         _dragging = false;
-        OnPointerDown?.Invoke(_downPos);
+
+        if (!_pressedOverUI)
+            OnPointerDown?.Invoke(_downPos);
     }
 
     void OnLmbCanceled(InputAction.CallbackContext _)
     {
         var upPos = _pointer;
+
+        if (_pressedOverUI)
+        {
+            // Clique começou em UI → não é seleção do mundo
+            _pressedOverUI = false;
+            _lmbDown = false;
+            return;
+        }
 
         if (_dragging) OnEndDrag?.Invoke(upPos);
         else HandleClick(upPos);
@@ -107,23 +127,30 @@ public class InputSelection : MonoBehaviour
 
     void OnRmbPerformed(InputAction.CallbackContext ctx)
     {
-        if (picker.TryPickGroundAt(_pointer, out var p, out _))   // agora _ � discard de Vector3
+        // Ignora RMB iniciado sobre UI
+        if (IsPointerOverUI()) return;      // usa o cache -> some o warning
+
+        if (picker != null && picker.TryPickGroundAt(_pointer, out var p, out _))
             OnClickGround?.Invoke(p, false, false);
     }
 
 
     void HandleClick(Vector2 screenPos)
     {
-        bool isCtrl = ctrl != null && ctrl.action.IsPressed();
-        bool isShift = shift != null && shift.action.IsPressed();
+        if (picker == null) return;
+
+        bool isCtrl = IsCtrlPressed;
+        bool isShift = IsShiftPressed;
 
         if (picker.TryPickUnitAt(screenPos, out var unit))
         {
+            // double click
             if (unit == _lastClickedUnit &&
                 (Time.unscaledTime - _lastClickTime) <= doubleClickWindow)
             {
                 OnDoubleClickUnit?.Invoke(unit);
-                _lastClickTime = 0f; _lastClickedUnit = null;
+                _lastClickedUnit = null;
+                _lastClickTime = 0f;
                 return;
             }
 
@@ -137,5 +164,29 @@ public class InputSelection : MonoBehaviour
             _lastClickedUnit = null;
             _lastClickTime = 0f;
         }
+    }
+
+    bool IsPointerOverUI() => _overUIThisFrame;
+    bool ComputePointerOverUI()
+    {
+        if (EventSystem.current == null) return false;
+
+        // --- Input System novo: melhor passar um pointerId ---
+#if ENABLE_INPUT_SYSTEM
+        // Mouse
+        if (Mouse.current != null)
+            return EventSystem.current.IsPointerOverGameObject(Mouse.current.deviceId);
+
+        // Toque (qualquer dedo ativo)
+        if (Touchscreen.current != null)
+        {
+            foreach (var t in Touchscreen.current.touches)
+                if (t.isInProgress && EventSystem.current.IsPointerOverGameObject(t.touchId.ReadValue()))
+                    return true;
+        }
+#endif
+
+        // Fallback (standalone/legacy)
+        return EventSystem.current.IsPointerOverGameObject();
     }
 }

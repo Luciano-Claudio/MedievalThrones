@@ -4,7 +4,7 @@ using UnityEngine;
 public class SelectionDebugListener : MonoBehaviour
 {
     public InputSelection input;
-
+    /*
     void OnEnable()
     {
         input.OnClickUnit += (u, c, s) => Debug.Log($"Click Unit: {u.DisplayName} ctrl:{c} shift:{s}");
@@ -13,4 +13,5 @@ public class SelectionDebugListener : MonoBehaviour
         input.OnBeginDrag += p => Debug.Log($"BeginDrag {p}");
         input.OnEndDrag += p => Debug.Log($"EndDrag {p}");
     }
+    */
 }

@@ -17,7 +17,7 @@ public class ClockUI : MonoBehaviour
     private void Update()
     {
 
-        clockText.text = $" {hour:00}:{minute:00}";
+        clockText.text = $"Time {hour:00}:{minute:00}";
         dayText.text = $"Day {day}";
 
     }

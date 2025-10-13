@@ -10,6 +10,10 @@ public static class UnitRegistry
     static readonly List<Unit> _all = new();
     static readonly Dictionary<FactionId, List<Unit>> _perFaction = new();
 
+    public static IReadOnlyList<Unit> All => _all;
+    public static IReadOnlyList<Unit> GetByFaction(FactionId f) =>
+        _perFaction.TryGetValue(f, out var list) ? list : Array.Empty<Unit>();
+
     public static void Register(Unit u)
     {
         if (!_all.Contains(u))
@@ -34,7 +38,4 @@ public static class UnitRegistry
         }
     }
 
-    public static IReadOnlyList<Unit> All => _all;
-    public static IReadOnlyList<Unit> GetByFaction(FactionId f) =>
-        _perFaction.TryGetValue(f, out var list) ? list : Array.Empty<Unit>();
 }

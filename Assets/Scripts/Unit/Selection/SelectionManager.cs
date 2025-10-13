@@ -1,4 +1,4 @@
-using System;
+ï»¿using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -6,28 +6,30 @@ using UnityEngine.EventSystems;
 public class SelectionManager : MonoBehaviour
 {
     [Header("Selection")]
-    [Tooltip("Px extras no retângulo para evitar perda por borda")]
+    [Tooltip("Px extras no retï¿½ngulo para evitar perda por borda")]
     public float rectInflatePx = 1.5f;
 
     [Header("Refs")]
-    public PlayerController player;   // define a facção local (Player1, etc.)
-    public Camera cam;                // mesma câmera usada no WorldPicker
+    public PlayerController player;   // define a facï¿½ï¿½o local (Player1, etc.)
+    public Camera cam;                // mesma cï¿½mera usada no WorldPicker
     public InputSelection input;      // nosso input separado
 
     [Header("Filtro")]
-    public bool onlyOwnUnits = true;  // nunca selecionar unidades de outra facção
+    public bool onlyOwnUnits = true;  // nunca selecionar unidades de outra facï¿½ï¿½o
 
-    // seleção atual
+    // seleÃ§Ã£o atual
     readonly HashSet<Unit> _selection = new();
     public IReadOnlyCollection<Unit> Selection => _selection;
     public int Count => _selection.Count;
     public event Action<IReadOnlyCollection<Unit>> OnSelectionChanged;
 
-    // âncora para SHIFT (intervalo)
+    // ï¿½ncora para SHIFT (intervalo)
     Unit _rangeAnchor;     // << era _anchorUnit
 
     // controle de drag (coordenadas de tela)
     Vector2 _dragStart;
+    public void ClearAnchor() => _rangeAnchor = null;
+
 
     void Reset()
     {
@@ -38,7 +40,7 @@ public class SelectionManager : MonoBehaviour
     {
         input.OnClickUnit += HandleClickUnit;
         input.OnClickGround += HandleClickGround;
-        input.OnBeginDrag += OnBeginDragHandler;   // << usar método
+        input.OnBeginDrag += OnBeginDragHandler;   // << usar mï¿½todo
         input.OnEndDrag += HandleEndDrag;
         input.OnDoubleClickUnit += HandleDoubleClickUnit;
     }
@@ -47,7 +49,7 @@ public class SelectionManager : MonoBehaviour
     {
         input.OnClickUnit -= HandleClickUnit;
         input.OnClickGround -= HandleClickGround;
-        input.OnBeginDrag -= OnBeginDragHandler;   // << remover o mesmo método
+        input.OnBeginDrag -= OnBeginDragHandler;   // << remover o mesmo mï¿½todo
         input.OnEndDrag -= HandleEndDrag;
         input.OnDoubleClickUnit -= HandleDoubleClickUnit;
     }
@@ -64,18 +66,18 @@ public class SelectionManager : MonoBehaviour
 
         if (shift)
         {
-            // intervalo no "mundo": retângulo entre âncora e alvo clicado
-            // Se ainda não existe âncora, trata como clique normal e define âncora.
+            // intervalo no "mundo": retï¿½ngulo entre ï¿½ncora e alvo clicado
+            // Se ainda nï¿½o existe ï¿½ncora, trata como clique normal e define ï¿½ncora.
             if (_rangeAnchor == null)
             {
                 if (ctrl) Toggle(unit);
                 else { Clear(); Add(unit); }
-                _rangeAnchor = unit;     // define âncora
+                _rangeAnchor = unit;     // define ï¿½ncora
                 FireChanged();
                 return;
             }
 
-            // SHIFT: seleciona intervalo entre âncora fixa e o novo alvo.
+            // SHIFT: seleciona intervalo entre ï¿½ncora fixa e o novo alvo.
             var a = cam.WorldToScreenPoint(_rangeAnchor.transform.position);
             var b = cam.WorldToScreenPoint(unit.transform.position);
 
@@ -83,11 +85,11 @@ public class SelectionManager : MonoBehaviour
             var rect = Inflate(BuildRect(a, b), rectInflatePx);
             SelectByScreenRect(rect, additive: ctrl);
 
-            // Garante os extremos dentro (âncora e alvo)
+            // Garante os extremos dentro (ï¿½ncora e alvo)
             if (!onlyOwnUnits || _rangeAnchor.owner == player.myFaction) Add(_rangeAnchor);
             Add(unit);
 
-            // IMPORTANTE: NÃO muda a âncora enquanto Shift estiver pressionado
+            // IMPORTANTE: Nï¿½O muda a ï¿½ncora enquanto Shift estiver pressionado
             FireChanged();
             return;
         }
@@ -103,24 +105,24 @@ public class SelectionManager : MonoBehaviour
     {
         if (shift && _rangeAnchor != null)
         {
-            // SHIFT + clique no terreno: usa âncora e o ponto clicado
+            // SHIFT + clique no terreno: usa ï¿½ncora e o ponto clicado
             var a = cam.WorldToScreenPoint(_rangeAnchor.transform.position);
             var b = cam.WorldToScreenPoint(worldPoint);
 
             var rect = Inflate(BuildRect(a, b), rectInflatePx);
             SelectByScreenRect(rect, additive: ctrl);
 
-            // garante a âncora dentro
+            // garante a ï¿½ncora dentro
             if (!onlyOwnUnits || _rangeAnchor.owner == player.myFaction) Add(_rangeAnchor);
 
-            // NÃO muda a âncora
+            // Nï¿½O muda a ï¿½ncora
             FireChanged();
             return;
         }
 
-        // clique no chão (ou RMB no seu setup): limpa seleção
+        // clique no chï¿½o (ou RMB no seu setup): limpa seleï¿½ï¿½o
         Clear();
-        // opcional: não mexer na âncora; ela permanece até um clique normal substituir
+        // opcional: nï¿½o mexer na ï¿½ncora; ela permanece atï¿½ um clique normal substituir
         FireChanged();
     }
     void HandleEndDrag(Vector2 endScreenPos)
@@ -128,7 +130,7 @@ public class SelectionManager : MonoBehaviour
         // arrasto retangular: substitui; com Ctrl, adiciona
         bool ctrl = input != null && input.IsCtrlPressed;
         SelectByScreenRect(BuildRect(_dragStart, endScreenPos), additive: ctrl);
-        // NÃO altera _rangeAnchor
+        // Nï¿½O altera _rangeAnchor
         FireChanged();
     }
     void HandleDoubleClickUnit(Unit unit)
@@ -136,18 +138,18 @@ public class SelectionManager : MonoBehaviour
         if (onlyOwnUnits && unit.owner != player.myFaction) return;
 
         Clear();
-        // "mesmo tipo visível": vou usar UnitDefinition (ou type)
+        // "mesmo tipo visï¿½vel": vou usar UnitDefinition (ou type)
         var mine = UnitRegistry.GetByFaction(player.myFaction);
         foreach (var u in mine)
         {
             if (!IsOnScreen(u.transform.position)) continue;
             if (u.def == unit.def) Add(u); // ou comparar u.def.type se preferir
         }
-        _rangeAnchor = unit;  // duplo clique atualiza âncora
+        _rangeAnchor = unit;  // duplo clique atualiza ï¿½ncora
         FireChanged();
     }
 
-    // ======== Operações de Seleção ========
+    // ======== Operaï¿½ï¿½es de Seleï¿½ï¿½o ========
 
     void Add(Unit u)
     {
@@ -181,7 +183,7 @@ public class SelectionManager : MonoBehaviour
         {
             var u = mine[i];
             var sp = cam.WorldToScreenPoint(u.transform.position);
-            if (sp.z <= 0f) continue;                   // atrás da câmera
+            if (sp.z <= 0f) continue;                   // atrï¿½s da cï¿½mera
             if (!IsInViewport(sp)) continue;            // fora da tela
             if (screenRect.Contains(sp, true)) Add(u);  // centro-dentro
         }
@@ -198,7 +200,7 @@ public class SelectionManager : MonoBehaviour
 
     bool IsInViewport(Vector3 screenPos)
     {
-        // se quiser, pode usar viewport (0..1). Aqui já basta checar limites da tela:
+        // se quiser, pode usar viewport (0..1). Aqui jï¿½ basta checar limites da tela:
         return screenPos.x >= 0 && screenPos.x <= Screen.width &&
                screenPos.y >= 0 && screenPos.y <= Screen.height;
     }
@@ -215,6 +217,51 @@ public class SelectionManager : MonoBehaviour
         r.xMin -= px; r.yMin -= px;
         r.xMax += px; r.yMax += px;
         return r;
+    }
+
+    // ======== Bridge p/ UI da lista (mÃ©todos ADITIVOS) ========
+    public bool IsSelected(Unit u) => u != null && _selection.Contains(u);
+
+    public void SelectExactly(IEnumerable<Unit> units)
+    {
+        Clear();
+        if (units != null)
+        {
+            foreach (var u in units) if (u != null) Add(u);
+        }
+        FireChanged();
+    }
+
+    public void SelectExactly(Unit u)
+    {
+        Clear();
+        if (u != null) Add(u);
+        FireChanged();
+    }
+
+    public void ToggleSet(IEnumerable<Unit> units)
+    {
+        if (units == null) return;
+        foreach (var u in units) if (u != null) Toggle(u);
+        FireChanged();
+    }
+    // ADIÃ‡ÃƒO: uniÃ£o (add) sem limpar o que jÃ¡ estÃ¡ selecionado
+    public void AddToSelection(IEnumerable<Unit> units)
+    {
+        if (units == null) return;
+
+        bool changed = false;
+        foreach (var u in units)
+        {
+            if (u == null) continue;
+            if (_selection.Add(u))
+            {
+                u.SetSelected(true);
+                changed = true;
+            }
+        }
+
+        if (changed) FireChanged();
     }
 
 }
