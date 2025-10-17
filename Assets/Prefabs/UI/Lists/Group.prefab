@@ -283,7 +283,7 @@ MonoBehaviour:
   contextMenuPrefab: {fileID: 3100027413863622866, guid: 8b0fe0e1829a99e4888f8c69c830852d, type: 3}
   uiRoot: {fileID: 0}
   Rei: {fileID: 7026473975155662193}
-  screenPadding: {x: 20, y: 20}
+  screenPadding: {x: -20, y: -20}
   blockerColor: {r: 0, g: 0, b: 0, a: 0.001}
 --- !u!1 &1820450856721707451
 GameObject:
