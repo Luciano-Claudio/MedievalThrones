@@ -5,7 +5,7 @@ using UnityEngine.UI;
 
 [RequireComponent(typeof(ReorderableListItem))]
 [RequireComponent(typeof(UnitListItemUI))]
-public class UnitListItemContextMenu : MonoBehaviour, IPointerClickHandler
+public class UnitListItemContextMenu : MonoBehaviour
 {
     [Header("Prefab do menu (root tem UnitContextMenuHandler)")]
     public RectTransform contextMenuPrefab;
@@ -27,23 +27,6 @@ public class UnitListItemContextMenu : MonoBehaviour, IPointerClickHandler
         _ui = GetComponent<UnitListItemUI>();
     }
 
-    // ===== clique direito abre o menu =====
-    public void OnPointerClick(PointerEventData e)
-    {
-        if (e.button == PointerEventData.InputButton.Right)
-        {
-            // seleciona este item ANTES de abrir o menu
-            SelectSelf();
-            ShowMenuAt(e.position, e.pressEventCamera);
-        }
-        else if (e.button == PointerEventData.InputButton.Left)
-        {
-            // left cancela/fecha o menu
-            SelectSelf();
-            CloseMenu();
-        }
-    }
-
     // ===== alvo para Follow =====
     Transform ResolveTargetTransform()
     {
@@ -56,7 +39,7 @@ public class UnitListItemContextMenu : MonoBehaviour, IPointerClickHandler
     }
 
     // ===== instancia popup =====
-    void ShowMenuAt(Vector2 screenPos, Camera eventCam)
+    public void ShowMenuAt(Vector2 screenPos, Camera eventCam)
     {
         CloseMenu();
         if (!contextMenuPrefab) return;
@@ -93,24 +76,7 @@ public class UnitListItemContextMenu : MonoBehaviour, IPointerClickHandler
         catcher.onRightClick = () =>
         {
             CloseMenu();
-
-            var pointer = new PointerEventData(EventSystem.current)
-            {
-                position = Mouse.current.position.ReadValue(),
-                button = PointerEventData.InputButton.Right
-            };
-            var results = new System.Collections.Generic.List<RaycastResult>();
-            EventSystem.current.RaycastAll(pointer, results);
-
-            foreach (var r in results)
-            {
-                var ctx = r.gameObject.GetComponent<UnitListItemContextMenu>();
-                if (ctx != null)
-                {
-                    ctx.OnPointerClick(pointer); // <- vai selecionar e abrir no item alvo
-                    break;
-                }
-            }
+            ForwardRightClickToAnyContextTarget();
         };
 
         // 2) menu
@@ -163,19 +129,38 @@ public class UnitListItemContextMenu : MonoBehaviour, IPointerClickHandler
     }
     void SelectSelf()
     {
-        // pega Unit e o painel para usar a lógica centralizada
         var panel = GetComponentInParent<UnitListPanel>();
         var unit = _ui != null ? _ui.Unit : null;
         if (panel == null || unit == null) return;
 
-        // lê modificadores do seu InputSelection (se existir)
-        bool ctrl = panel.InputSelection != null && panel.InputSelection.IsCtrlPressed;
-        bool shift = panel.InputSelection != null && panel.InputSelection.IsShiftPressed;
-
-        // clique simples (sem duplo-clique)
-        panel.OnItemClicked(unit, ctrl, shift, isDouble: false);
+        // Seleção simples, sem Ctrl/Shift/double
+        panel.SelectOnlyUnit(unit);
     }
+    void ForwardRightClickToAnyContextTarget()
+    {
+        var es = EventSystem.current;
+        if (es == null) return;
 
+        var pointer = new PointerEventData(es)
+        {
+            position = UnityEngine.InputSystem.Mouse.current.position.ReadValue(),
+            button = PointerEventData.InputButton.Right
+        };
+
+        var results = new System.Collections.Generic.List<RaycastResult>();
+        es.RaycastAll(pointer, results);
+
+        foreach (var r in results)
+        {
+            // 1) tenta item de unidade
+            var unitCtx = r.gameObject.GetComponent<UnitListItemHandle>();
+            if (unitCtx != null) { unitCtx.OnPointerClick(pointer); return; }
+
+            // 2) tenta header de grupo
+            var groupCtx = r.gameObject.GetComponent<GroupHeaderContextMenu>();
+            if (groupCtx != null) { groupCtx.OnPointerClick(pointer); return; }
+        }
+    }
 
     public void CloseMenu()
     {

@@ -1,20 +1,13 @@
 using UnityEngine;
-using UnityEngine.UI;
 
 public class DragRectRenderer : MonoBehaviour
 {
     public InputSelection input;
-    public Image rectImage;        // Image dentro do Canvas
-    public Canvas canvas;          // Root canvas do retângulo
+    public Camera cam;
+    public GameObject quadPrefab;
 
-    RectTransform _canvasRect;     // cache
-    Vector2 _startLocal;
-
-    void Awake()
-    {
-        if (!canvas) canvas = rectImage.canvas;
-        _canvasRect = canvas.GetComponent<RectTransform>();
-    }
+    GameObject _activeQuad;
+    Vector3 _startWorld;
 
     void OnEnable()
     {
@@ -22,6 +15,7 @@ public class DragRectRenderer : MonoBehaviour
         input.OnDragging += UpdateRect;
         input.OnEndDrag += EndRect;
     }
+
     void OnDisable()
     {
         input.OnBeginDrag -= BeginRect;
@@ -29,38 +23,45 @@ public class DragRectRenderer : MonoBehaviour
         input.OnEndDrag -= EndRect;
     }
 
-    Camera UICamera =>
-        canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.worldCamera;
-
     void BeginRect(Vector2 screenStart)
     {
-        // Converte ponto de tela para coordenada local do canvas
-        RectTransformUtility.ScreenPointToLocalPointInRectangle(
-            _canvasRect, screenStart, UICamera, out _startLocal);
+        if (!cam || !quadPrefab) return;
 
-        rectImage.gameObject.SetActive(true);
-        UpdateRect(screenStart); // desenha um frame inicial
+        if (Physics.Raycast(cam.ScreenPointToRay(screenStart), out var hit))
+        {
+            _startWorld = hit.point;
+            _activeQuad = Instantiate(quadPrefab);
+            _activeQuad.SetActive(true);
+            UpdateRect(screenStart); // desenha um frame inicial
+        }
     }
 
     void UpdateRect(Vector2 screenPos)
     {
-        RectTransformUtility.ScreenPointToLocalPointInRectangle(
-            _canvasRect, screenPos, UICamera, out var currentLocal);
+        if (_activeQuad == null || !cam) return;
 
-        // calcula min/max em espaço local do canvas
-        var min = Vector2.Min(_startLocal, currentLocal);
-        var max = Vector2.Max(_startLocal, currentLocal);
+        if (Physics.Raycast(cam.ScreenPointToRay(screenPos), out var hit))
+        {
+            Vector3 endWorld = hit.point;
 
-        var center = (min + max) * 0.5f;
-        var size = (max - min);
-
-        var rt = rectImage.rectTransform;
-        rt.anchoredPosition = center; // com pivot 0.5/0.5, essa é a posição do centro
-        rt.sizeDelta = size;   // largura/altura
+            Vector3 center = (_startWorld + endWorld) * 0.5f;
+            Vector3 size = new Vector3(
+                Mathf.Abs(endWorld.x - _startWorld.x),
+                Mathf.Abs(endWorld.z - _startWorld.z),
+                1f
+            );
+            center.y = 1f;
+            _activeQuad.transform.position = center;
+            _activeQuad.transform.localScale = size;
+        }
     }
 
     void EndRect(Vector2 _)
     {
-        rectImage.gameObject.SetActive(false);
+        if (_activeQuad != null)
+        {
+            Destroy(_activeQuad);
+            _activeQuad = null;
+        }
     }
 }

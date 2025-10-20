@@ -355,6 +355,17 @@ public class UnitListPanel : MonoBehaviour
         selection.SelectExactly(unit);
         _anchorIndex = index;
     }
+    public void SelectOnlyUnit(Unit unit)
+    {
+        if (unit == null || selection == null) return;
+
+        // Seleção simples
+        selection.SelectExactly(unit);
+
+        // Atualiza âncora do SHIFT (se soubermos o índice na raiz)
+        var wrapper = _order.FirstOrDefault(w => w.GetUnit() == unit);
+        _anchorIndex = (wrapper != null) ? _order.IndexOf(wrapper) : (int?)null;
+    }
 
     public void RefreshFromSelection(IReadOnlyCollection<Unit> units)
     {

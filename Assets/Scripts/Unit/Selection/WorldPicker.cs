@@ -5,7 +5,7 @@ public class WorldPicker : MonoBehaviour
     public Camera cam;
     public LayerMask unitMask;   // Unit
     public LayerMask groundMask; // Ground
-    public float maxDistance = 500f;
+    float maxDistance = float.MaxValue;
 
     void Reset() { cam = Camera.main; }
 
