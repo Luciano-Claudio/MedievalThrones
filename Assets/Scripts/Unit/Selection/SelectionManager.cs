@@ -169,13 +169,6 @@ public class SelectionManager : MonoBehaviour
 
     // ======== Util ========
 
-    Rect BuildRect(Vector2 a, Vector2 b)
-    {
-        var min = Vector2.Min(a, b);
-        var max = Vector2.Max(a, b);
-        return Rect.MinMaxRect(min.x, min.y, max.x, max.y);
-    }
-
     bool IsInViewport(Vector3 screenPos)
     {
         // se quiser, pode usar viewport (0..1). Aqui j� basta checar limites da tela:

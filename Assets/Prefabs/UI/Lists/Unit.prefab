@@ -640,7 +640,7 @@ MonoBehaviour:
   barFill: {fileID: 8045218370502965100}
   circleFill: {fileID: 4314591988609290907}
   outline: {fileID: 6969311745829977217}
-  debugXp01: 0
+  debugXp01: 0.152
 --- !u!114 &1995281951297960902
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1085,7 +1085,7 @@ MonoBehaviour:
   m_PreserveAspect: 0
   m_FillCenter: 1
   m_FillMethod: 0
-  m_FillAmount: 0
+  m_FillAmount: 0.16888888
   m_FillClockwise: 1
   m_FillOrigin: 0
   m_UseSpriteMesh: 0

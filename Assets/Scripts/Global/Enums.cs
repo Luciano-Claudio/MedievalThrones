@@ -1,6 +1,6 @@
 using UnityEngine;
 
-public enum FactionId { Neutral = 0, Player1 = 1, Player2 = 2, PvE = 3 }
+public enum FactionId { Neutral = 0, Player1 = 1, Player2 = 2, Player3 = 3, Player4 = 4, PvE = 3 }
 
 public enum ResourceType { Wood, Stone, Iron, Mithril, Food, Gold }
 
