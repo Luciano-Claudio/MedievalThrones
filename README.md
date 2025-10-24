@@ -1,213 +1,1024 @@
 # MedievalThrones
 
-# PROJETO DE DOCUMENTAÇÃO DETALHADA — Jogo RTS
+# LOTE 1 — VARIÁVEIS GLOBAIS & MÓDULO FACTIONS
 
-**Versão:** 2.0 (Atualizada - Outubro 2025)  
-**Status:** ✅ Refatorado e Otimizado
+**Versão:** 3.0 (Atualizada - Outubro 2025)  
+**Status:** ✅ Refatorado e Validado com Código Atual
 
 ---
 
-## LOTE 1 — Variáveis Globais & Módulo Factions
+## 📋 ÍNDICE
 
-### Objetivo
-
-Oferecer uma referência técnica clara, rastreável e reutilizável dos módulos "Variáveis Globais" (tempo/clock, eventos e configuração) e "Factions" (definições, banco e serviço de reputação), alinhada à sua base de código atual em Unity/C#.
+1. [Visão Geral do Módulo](#1-visão-geral-do-módulo)
+2. [GameEvents - Event Bus Global](#2-gameevents---event-bus-global)
+3. [Enums Globais](#3-enums-globais)
+4. [GameConfig - Configuração Global](#4-gameconfig---configuração-global)
+5. [GameContext - Orquestrador Central](#5-gamecontext---orquestrador-central)
+6. [TimeManager - Sistema de Tempo](#6-timemanager---sistema-de-tempo)
+7. [Módulo Factions](#7-módulo-factions)
+8. [PlayerController](#8-playercontroller)
+9. [DayNightLightController](#9-daynightlightcontroller)
+10. [Fluxo de Inicialização](#10-fluxo-de-inicialização)
+11. [Integração entre Módulos](#11-integração-entre-módulos)
+12. [Tabela de Relacionamentos Completa](#12-tabela-de-relacionamentos-completa)
+13. [Changelog e Migrações](#13-changelog-e-migrações)
 
 ---
 
 ## 1) VISÃO GERAL DO MÓDULO
 
-### 1.1 Variáveis Globais (Tempo, Config, Eventos, Contexto)
-
-Responsável por centralizar configurações globais (ex.: duração do dia, penalidades, baseline de economia), gestão do tempo de jogo (fração do dia, dia/hora/minuto, virada do dia) e eventos de gameplay (clock, economia, diplomacia, câmera). O `GameContext` atua como ponto orquestrador, inicializando serviços e injetando referências entre os sistemas.
-
-### 1.2 Módulo Factions (Definições, Banco, Reputação)
-
-Fornece o modelo de dados de Factions (id, nome, cor, banner e reputação inicial), um banco de Factions para lookup por id e um serviço de reputação para manter uma matriz de relacionamento A→B no runtime e emitir eventos de mudança, favorecendo IA/diplomacia reativa.
-
----
-
-## 2) ESTRUTURA DAS CLASSES E RELACIONAMENTOS
-
-### 2.1 Enums.cs
-
-**Arquivo/Classe:** `Enums` (enums globais)
-
-**Conteúdo:**
-- **FactionId** — Identificadores de facção (Neutral, Player1… PvE)
-- **ResourceType** — Tipos de recurso (Wood, Stone, ... Gold)
-- **DamageType** — Tipos de dano (Slashing, Piercing, ... Magic)
-- **TerrainType** — Tipos de terreno (Normal, Mud, ... RoadPaved)
-- **UnitType** — Tipos de unidade (Worker, Warrior, ... Hero)
-
-**Relacionamentos:** Usado de forma transversal por sistemas de economia, combate, pathing e UI. `FactionId` é chave no módulo de Factions e no `PlayerController`.
-
----
-
-### 2.2 GameConfig.cs
-
-**Tipo:** `ScriptableObject`
-
-**Responsabilidade:** Armazenar configuração global do jogo (tempo de dia, fração diurna/nocturna, penalidades de clima/terreno, baseline de economia, custos/unidades especiais, reparos e helpers).
-
-**Principais campos:**
-
-**Tempo:**
-- `secondsPerDay`
-- `dayFraction`
-
-**Clima/Mod.:**
-- `nightVisionPenalty`
-- `fogVisionPenalty`
-- `mudSandMovePenalty`
-- `snowExtraUpkeep`
-
-**Economia:**
-- `baselineGatherMinTotal`
-- `baselineGatherPer3Min`
-- `workerCarryCapacity`
-
-**Unid. especiais:**
-- `merchantSpeedHexPerSec`
-- `merchantCapacity`
-- `merchantCostGold`
-
-**Reparos:**
-- `structureRepairHpPerSec`
-
-**Helpers:**
-- `BaselinePerSecond { get; }`
-- `SecondsPerDay { get; }`
-
-**Relacionamentos:** Usado por `TimeManager` (tempo) e por outros sistemas que precisem de balizadores globais.
-
----
-
-### 2.3 GameEvents.cs (ATUALIZADO)
-
-**Tipo:** `static class`
-
-**Responsabilidade:** Surface de eventos globais para desacoplamento entre sistemas.
-
-**Eventos expostos:**
-
-#### Tempo/Clock
-- `Action<float> OnTimeOfDay01` — fração 0..1 do dia
-- `Action<int> OnDayChanged` — incrementa no loop diário
-- `Action<int, int, int> OnClockChanged` — dia, hora, minuto
-
-#### Economia
-- `Action<FactionId, ResourceType, int> OnResourceGathered`
-
-#### Diplomacia
-- `Action OnReputationMatrixReady` — reputação seed pronta
-- `Action<FactionId, FactionId, float> OnReputationChanged` — mudança A→B
-
-#### Câmera (NOVO)
-- `Action<float, float, float> OnCameraShake` — amplitude, frequency, duration
-- `Action<Vector3, bool, float> OnCameraFocus` — worldPos, snap, duration
-- `Action<Vector2, bool, float> OnCameraFocusXZ` — worldXZ, snap, duration
-- `Action<Transform, float, int> OnCutsceneStart` — target, fov, priority
-- `Action OnCutsceneEnd`
-
-#### Seleção/Minimap (NOVO)
-- `Action<Vector2> OnMinimapPing` — worldXZ
-- `Action<Transform> OnSelectionFocus` — target transform
-
-**Helpers:** Raise* para disparo centralizado de todos os eventos acima.
-
-**Relacionamentos:** Observado por `DayNightLightController` (cor/intensidade do sol), por sistemas de UI/clock, IA/economia/diplomacia e pelo sistema de câmera.
-
----
-
-### 2.4 GameContext.cs
-
-**Tipo:** `MonoBehaviour`
-
-**Responsabilidade:** Ponto de orquestração na cena. Injeta config e inicializa serviços (`FactionService.Init`, configuração do `TimeManager`).
-
-**Relacionamentos:** Guarda referências a `GameConfig`, `FactionDatabase`, `FactionService`, `TimeManager` e chama inicialização na `Awake`.
-
----
-
-### 2.5 TimeManager.cs
-
-**Tipo:** `MonoBehaviour`
-
-**Responsabilidade:** Avança o relógio global, computa fração do dia (0..1), dia/hora/minuto e emite os eventos de tempo.
-
-**Fluxo:**
-- **Awake:** inicializa `Time01` (fração) e publica `RaiseTimeOfDay`
-- **Update:** usa `config.SecondsPerDay` para avançar `Time01`, detecta virada de dia, converte para HH:MM, dispara "tic" por minuto (`RaiseClockChanged`) e `RaiseTimeOfDay` a cada frame
-- **IsNight():** utilitário que compara `Time01` com `config.dayFraction`
-
-**Relacionamentos:** Consome `GameConfig`; emite eventos de tempo; observado por `DayNightLightController` e sistemas dependentes de ciclo dia/noite.
-
----
-
-### 2.6 DayNightLightController.cs
-
-**Tipo:** `MonoBehaviour`
-
-**Responsabilidade:** Ajustar cor e intensidade de uma Directional Light com base em `TimeOfDay` (0..1) e aplicar rotação simples do "sol".
-
-**Relacionamentos:** Se inscreve em `GameEvents.OnTimeOfDay01` para reagir ao ciclo.
-
----
-
-### 2.7 FactionDefinition.cs
-
-**Tipo:** `ScriptableObject`
-
-**Responsabilidade:** Metadados individuais de uma facção: id, displayName, color, banner e initialReputation (padrão neutro 50).
-
-**Relacionamentos:** Instanciada no `FactionDatabase`; consumida por UI (cores/bandeiras) e por `FactionService` (seed de reputação).
-
----
-
-### 2.8 FactionDatabase.cs
-
-**Tipo:** `ScriptableObject`
-
-**Responsabilidade:** Coleção de `FactionDefinition` e lookup por id.
-
-**Relacionamentos:** Referenciada por `FactionService` e opcionalmente por UI/editor tools.
-
----
-
-### 2.9 FactionService.cs
-
-**Tipo:** `MonoBehaviour`
-
-**Responsabilidade:** Manter, em runtime, a matriz de reputação A→B (0..100), inicializada a partir de `FactionDatabase` (via `initialReputation`). Expõe leitura/escrita e delta com eventos (`ReputationChanged`, `ReputationMatrixReady`).
-
-**Relacionamentos:** Depende de `FactionDatabase`. Observado por IA/diplomacia/trigger systems e UI de relações.
-
----
-
-### 2.10 PlayerController.cs
-
-**Tipo:** `MonoBehaviour`
-
-**Responsabilidade:** Define a facção do player (`myFaction`) e mantém referência à `mainCamera`.
-
-**Relacionamentos:** Usa `FactionId` e integra com sistemas de input/câmera. Interage indiretamente com Factions (por exemplo, consultas de reputação player→outros).
-
----
-
-## 3) REFERÊNCIA DE API (Membros Públicos)
-
-### Enums.cs
-
-```csharp
-enum FactionId { Neutral, Player1, Player2, Player3, Player4, PvE }
-enum ResourceType { Wood, Stone, Iron, Mithril, Food, Gold }
-enum DamageType { Slashing, Piercing, Blunt, Siege, Fire, Magic }
-enum TerrainType { Normal, Mud, Snow, Sand, RoadDirt, RoadPaved }
-enum UnitType { Worker, Warrior, Spearman, Archer, CavalryLight, Ram, Catapult, Hero }
+### 1.1 Objetivo
+
+Fornecer a **fundação técnica do projeto Medieval Thrones**, centralizando:
+- ✅ **Variáveis Globais**: Enums, configurações, tempo de jogo
+- ✅ **Event Bus Global**: Sistema de comunicação desacoplada entre módulos (GameEvents)
+- ✅ **Sistema de Facções**: Definições, banco de dados e reputação em runtime
+- ✅ **Orquestração**: Inicialização e injeção de dependências via GameContext
+
+### 1.2 Responsabilidades Principais
+
+O **Lote 1** é responsável por:
+
+1. **GameEvents (Core dos Cores)**:
+   - Event bus centralizado com 31+ eventos
+   - Comunicação desacoplada entre todos os módulos
+   - Substituição completa de eventos locais
+
+2. **Configuração Global** (`GameConfig`):
+   - Duração do dia, penalidades de clima/terreno
+   - Baseline de economia, custos de unidades especiais
+   - Helpers para conversões e cálculos
+
+3. **Gestão de Tempo** (`TimeManager`):
+   - Avança relógio global (fração 0..1, dia/hora/minuto)
+   - Emite eventos de ciclo dia/noite via GameEvents
+   - Detecção automática de virada de dia
+
+4. **Sistema de Facções**:
+   - Definições de facções (ScriptableObjects)
+   - Banco de dados centralizado (FactionDatabase)
+   - Matriz de reputação em runtime (FactionService)
+
+5. **Orquestração** (`GameContext`):
+   - Ponto único de inicialização
+   - Injeção de dependências entre serviços
+   - Setup automático no Awake()
+
+### 1.3 Arquitetura Global do Sistema
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    GAMEEVENTS (Event Bus)                        │
+│                Core dos Cores - 31+ Eventos                      │
+│  Categorias: Tempo, Economia, Diplomacia, Câmera, Units, Input  │
+└──┬────────┬─────────┬──────────┬──────────┬──────────┬─────────┘
+   │        │         │          │          │          │
+   ▼        ▼         ▼          ▼          ▼          ▼
+┌────────┐┌────────┐┌─────────┐┌─────────┐┌────────┐┌─────────┐
+│  Time  ││Factions││  Unit   ││Selection││ Camera ││   UI    │
+│Manager ││Service ││(Lote 3) ││(Lote 4) ││(Lote 2)││ System  │
+└───┬────┘└────┬───┘└────┬────┘└────┬────┘└───┬────┘└────┬────┘
+    │          │         │          │         │          │
+    │          │         │          │         │          │
+    └──────────┴─────────┴──────────┴─────────┴──────────┘
+                          │
+                          ▼
+                  ┌───────────────┐
+                  │  GameContext  │ ← Orquestrador
+                  │    (Awake)    │   Inicializa serviços
+                  │               │   Injeta dependências
+                  └───────┬───────┘
+                          │
+                ┌─────────┼─────────┐
+                ▼         ▼         ▼
+          ┌──────────┐┌─────────┐┌────────┐
+          │GameConfig││Faction  ││  Time  │
+          │          ││Database ││ Manager│
+          └──────────┘└─────────┘└────────┘
 ```
 
-**Exemplos de uso:**
+**Fluxo de Comunicação:**
+1. Sistema A dispara evento via `GameEvents.RaiseXXX()`
+2. GameEvents propaga para todos os listeners inscritos
+3. Sistemas B, C, D reagem ao evento sem conhecer A
+4. **Desacoplamento total** entre módulos
+
+---
+
+## 2) GAMEEVENTS - EVENT BUS GLOBAL
+
+### 2.1 Visão Geral e Importância
+
+**GameEvents** é o **coração da arquitetura** do Medieval Thrones. É uma classe estática que funciona como **event bus centralizado**, permitindo comunicação desacoplada entre todos os módulos do jogo.
+
+#### **Por que GameEvents é "Core dos Cores"?**
+
+1. **Desacoplamento Total:**
+   - Módulos nunca se referenciam diretamente
+   - Exemplo: `SelectionManager` não conhece `UnitListUI`, mas ambos usam `OnSelectionChanged`
+
+2. **Testabilidade:**
+   - Eventos podem ser mockados em testes unitários
+   - Sistemas podem ser testados isoladamente
+
+3. **Escalabilidade:**
+   - Adicionar novo listener não requer modificar emissor
+   - Fácil adicionar/remover funcionalidades
+
+4. **Manutenibilidade:**
+   - Ponto único de documentação de eventos
+   - Rastreamento facilitado de fluxos de comunicação
+
+#### **Substituição de Eventos Locais:**
+
+**Antes (Arquitetura Antiga - NÃO use):**
+```csharp
+// ❌ Evento local (obsoleto)
+public class SelectionManager : MonoBehaviour {
+    public event Action<IReadOnlyCollection<Unit>> OnSelectionChanged;
+    
+    void FireChanged() {
+        OnSelectionChanged?.Invoke(_selection); // Acoplamento direto
+    }
+}
+
+// Consumer precisa de referência direta
+public class UnitListUI : MonoBehaviour {
+    [SerializeField] SelectionManager selectionManager; // ❌ Acoplado
+    
+    void OnEnable() {
+        selectionManager.OnSelectionChanged += UpdateList;
+    }
+}
+```
+
+**Depois (Arquitetura Atual - ✅ Use isso):**
+```csharp
+// ✅ Evento via GameEvents
+public class SelectionManager : MonoBehaviour {
+    void FireChanged() {
+        GameEvents.RaiseSelectionChanged(_selection); // Desacoplado
+    }
+}
+
+// Consumer não precisa de referência
+public class UnitListUI : MonoBehaviour {
+    // ✅ Sem referência ao SelectionManager
+    
+    void OnEnable() {
+        GameEvents.OnSelectionChanged += UpdateList; // Desacoplado
+    }
+    
+    void OnDisable() {
+        GameEvents.OnSelectionChanged -= UpdateList; // CRÍTICO: sempre desinscrever
+    }
+}
+```
+
+---
+
+### 2.2 Arquitetura Centralizada
+
+```
+┌────────────────────────────────────────────────────────────┐
+│                    GameEvents (static)                      │
+├────────────────────────────────────────────────────────────┤
+│  EVENTOS (31+)                    HELPERS (31+)            │
+│  • OnTimeOfDay01                  • RaiseTimeOfDay()       │
+│  • OnDayChanged                   • RaiseDayChanged()      │
+│  • OnSelectionChanged             • RaiseSelectionChanged()│
+│  • OnUnitClick                    • RaiseUnitClick()       │
+│  • ... (27 outros eventos)        • ... (27 outros raises) │
+└────────────────────────────────────────────────────────────┘
+           ▲                                  │
+           │ Subscribe                        │ Invoke
+           │                                  ▼
+  ┌────────┴────────┐              ┌─────────────────┐
+  │   LISTENERS     │              │    EMITTERS     │
+  ├─────────────────┤              ├─────────────────┤
+  │ • UI Systems    │              │ • TimeManager   │
+  │ • Audio         │              │ • SelectionMgr  │
+  │ • Minimap       │              │ • Unit          │
+  │ • IA/Triggers   │              │ • CameraCtrl    │
+  │ • Analytics     │              │ • InputSystem   │
+  └─────────────────┘              └─────────────────┘
+```
+
+---
+
+### 2.3 Categorias de Eventos (Tabela Resumida)
+
+| Categoria | Quantidade | Emissores Típicos | Listeners Típicos | Documentação |
+|-----------|-----------|-------------------|-------------------|--------------|
+| **Tempo** | 3 | `TimeManager` | UI (Clock), Luz, IA | [Seção 2.4.1](#241-eventos-de-tempo) |
+| **Economia** | 1 | Sistemas de Coleta | UI, Analytics, Audio | [Seção 2.4.2](#242-eventos-de-economia) |
+| **Diplomacia** | 2 | `FactionService` | UI, IA, Triggers | [Seção 2.4.3](#243-eventos-de-diplomacia) |
+| **Câmera** | 5 | Combate, UI, Triggers | `RTSCameraController` | [Seção 2.4.4](#244-eventos-de-câmera) |
+| **Unidades** | 4 | `Unit`, `UnitRegistry` | UI, Minimap, IA | [Seção 2.4.5](#245-eventos-de-unidades) |
+| **Seleção** | 10 | `InputSelection`, `SelectionManager` | UI, Audio, Comandos | [Seção 2.4.6](#246-eventos-de-seleção) |
+| **Input/Pointer** | 2 | `InputSelection` | Debug, Analytics | [Seção 2.4.7](#247-eventos-de-input-pointer) |
+| **Minimap** | 2 | UI (Minimap), Comandos | Câmera, Audio | [Seção 2.4.4](#244-eventos-de-câmera) |
+| **TOTAL** | **31** | - | - | - |
+
+---
+
+### 2.4 API Completa de Eventos
+
+#### 2.4.1 Eventos de Tempo
+
+**Responsabilidade:** Comunicar mudanças no relógio global do jogo.
+
+| Evento | Assinatura | Quando Dispara | Emissor | Listeners Típicos |
+|--------|-----------|----------------|---------|-------------------|
+| `OnTimeOfDay01` | `Action<float>` | Continuamente (cada frame) | `TimeManager` | `DayNightLightController`, Shaders, Fog |
+| `OnDayChanged` | `Action<int>` | Quando dia vira (0→1, 1→2...) | `TimeManager` | UI (Calendar), Save System, Analytics |
+| `OnClockChanged` | `Action<int, int, int>` | Cada minuto do relógio | `TimeManager` | UI (Clock Display), Mission Timers |
+
+**Exemplo de Uso (Listener):**
+
+```csharp
+// Sistema de UI que exibe relógio
+public class ClockUI : MonoBehaviour {
+    [SerializeField] TMP_Text clockText;
+    
+    void OnEnable() {
+        GameEvents.OnClockChanged += UpdateClock;
+    }
+    
+    void OnDisable() {
+        GameEvents.OnClockChanged -= UpdateClock; // CRÍTICO
+    }
+    
+    void UpdateClock(int day, int hour, int minute) {
+        clockText.text = $"Dia {day} - {hour:00}:{minute:00}";
+    }
+}
+```
+
+**Exemplo de Uso (Emissor):**
+
+```csharp
+// TimeManager dispara evento
+void Update() {
+    // ... cálculo de tempo ...
+    
+    if (Minute != _lastMinute) {
+        _lastMinute = Minute;
+        GameEvents.RaiseClockChanged(DayCount, Hour, Minute); // ← Disparo
+    }
+}
+```
+
+---
+
+#### 2.4.2 Eventos de Economia
+
+| Evento | Assinatura | Quando Dispara | Emissor | Listeners Típicos |
+|--------|-----------|----------------|---------|-------------------|
+| `OnResourceGathered` | `Action<FactionId, ResourceType, int>` | Recurso coletado | Sistema de Coleta | UI, Analytics, Audio (som de moedas) |
+
+**Parâmetros:**
+- `FactionId who`: Facção que coletou o recurso
+- `ResourceType type`: Tipo de recurso (Wood, Stone, Iron, etc.)
+- `int amount`: Quantidade coletada
+
+**Exemplo de Uso:**
+
+```csharp
+// Sistema de Coleta dispara evento
+public class ResourceGatherer : MonoBehaviour {
+    void OnGatherComplete(ResourceType type, int amount) {
+        // Lógica de coleta...
+        
+        GameEvents.RaiseResourceGathered(
+            myFaction, 
+            type, 
+            amount
+        );
+    }
+}
+
+// UI escuta e atualiza contador
+public class ResourceUI : MonoBehaviour {
+    Dictionary<ResourceType, int> _resources = new();
+    
+    void OnEnable() {
+        GameEvents.OnResourceGathered += OnResourceGathered;
+    }
+    
+    void OnDisable() {
+        GameEvents.OnResourceGathered -= OnResourceGathered;
+    }
+    
+    void OnResourceGathered(FactionId who, ResourceType type, int amount) {
+        if (who != myFaction) return; // Filtrar apenas nossa facção
+        
+        _resources[type] += amount;
+        UpdateResourceDisplay(type);
+    }
+}
+```
+
+---
+
+#### 2.4.3 Eventos de Diplomacia
+
+| Evento | Assinatura | Quando Dispara | Emissor | Listeners Típicos |
+|--------|-----------|----------------|---------|-------------------|
+| `OnReputationMatrixReady` | `Action` | Após inicialização da matriz | `FactionService.Init()` | IA, Triggers, UI |
+| `OnReputationChanged` | `Action<FactionId, FactionId, float>` | Reputação A→B muda | `FactionService.SetReputation()` | UI, IA, Dialogue System |
+
+**Exemplo de Uso:**
+
+```csharp
+// FactionService dispara eventos
+public class FactionService : MonoBehaviour {
+    public void Init() {
+        // Inicializa matriz de reputação...
+        GameEvents.RaiseReputationMatrixReady();
+    }
+    
+    public void SetReputation(FactionId a, FactionId b, float value) {
+        value = Mathf.Clamp(value, 0, 100);
+        _rep[(a, b)] = value;
+        GameEvents.RaiseReputationChanged(a, b, value); // ← Disparo
+    }
+}
+
+// Sistema de IA escuta e reage
+public class DiplomacyAI : MonoBehaviour {
+    void OnEnable() {
+        GameEvents.OnReputationChanged += OnReputationChanged;
+    }
+    
+    void OnReputationChanged(FactionId a, FactionId b, float newValue) {
+        if (a == myFaction) {
+            // Reagir a mudança de reputação
+            if (newValue < 30f) {
+                PrepareForWar(b);
+            } else if (newValue > 70f) {
+                OfferAlliance(b);
+            }
+        }
+    }
+}
+```
+
+---
+
+#### 2.4.4 Eventos de Câmera
+
+**Responsabilidade:** Controlar movimentos e efeitos da câmera via eventos de gameplay.
+
+| Evento | Assinatura | Quando Dispara | Emissor | Listener |
+|--------|-----------|----------------|---------|----------|
+| `OnCameraShake` | `Action<float, float, float>` | Impacto, explosão | Combate, Siege | `RTSCameraController` |
+| `OnCameraFocus` | `Action<Vector3, bool, float>` | Foco em posição 3D | UI, Missões | `RTSCameraController` |
+| `OnCameraFocusXZ` | `Action<Vector2, bool, float>` | Foco em posição XZ | Minimap, Pings | `RTSCameraController` |
+| `OnCutsceneStart` | `Action<Transform, float, int>` | Iniciar cinemática | Dialogue, Triggers | `RTSCameraController` |
+| `OnCutsceneEnd` | `Action` | Finalizar cinemática | Dialogue, Triggers | `RTSCameraController` |
+| `OnMinimapPing` | `Action<Vector2>` | Ping no minimapa | UI (clique minimapa) | Câmera, Audio |
+| `OnSelectionFocus` | `Action<Transform>` | Unidade selecionada | `Unit.SetSelected()` | Câmera (opcional) |
+
+**Parâmetros Detalhados:**
+
+**OnCameraShake:**
+- `float amplitude`: Intensidade do shake (0.5-3.0)
+- `float frequency`: Frequência da oscilação (1.0-5.0)
+- `float duration`: Duração em segundos (0.1-1.0)
+
+**OnCameraFocus / OnCameraFocusXZ:**
+- `Vector3/Vector2 position`: Posição alvo
+- `bool snap`: Se true, teleporta; se false, move suavemente
+- `float duration`: Duração do movimento (0.0 = instantâneo)
+
+**Exemplo de Uso:**
+
+```csharp
+// Sistema de Combate dispara shake
+public class ExplosionEffect : MonoBehaviour {
+    void Explode() {
+        // VFX, som...
+        
+        GameEvents.RaiseCameraShake(
+            amplitude: 2.0f,  // Shake forte
+            frequency: 3.5f,  // Oscilação rápida
+            duration: 0.4f    // Por 400ms
+        );
+    }
+}
+
+// RTSCameraController escuta e executa
+public class RTSCameraController : MonoBehaviour {
+    void OnEnable() {
+        GameEvents.OnCameraShake += HandleCameraShake;
+    }
+    
+    void HandleCameraShake(float amp, float freq, float dur) {
+        StartCoroutine(CoShake(amp, freq, dur));
+    }
+}
+
+// Minimap dispara foco
+public class MinimapUI : MonoBehaviour {
+    void OnMinimapClicked(Vector2 worldXZ) {
+        GameEvents.RaiseMinimapPing(worldXZ);
+        // Câmera move automaticamente
+    }
+}
+```
+
+---
+
+#### 2.4.5 Eventos de Unidades
+
+**Responsabilidade:** Comunicar mudanças de estado de unidades individuais.
+
+| Evento | Assinatura | Quando Dispara | Emissor | Listeners Típicos |
+|--------|-----------|----------------|---------|-------------------|
+| `OnUnitSpawned` | `Action<Unit>` | Unidade criada/ativada | `UnitRegistry.Register()` | Minimap, Fog of War, IA |
+| `OnUnitDespawned` | `Action<Unit>` | Unidade destruída/desativada | `UnitRegistry.Unregister()` | Minimap, Fog of War, IA |
+| `OnUnitSelectionChanged` | `Action<Unit, bool>` | Unidade selecionada/desselecionada | `Unit.SetSelected()` | UI (painel de unidade), Audio |
+| `OnUnitProgressChanged` | `Action<Unit>` | XP ou Level muda | `Unit.AddXp()` | UI (barra de XP), Audio (level up) |
+
+**Exemplo de Uso:**
+
+```csharp
+// Unit dispara eventos automaticamente
+public class Unit : MonoBehaviour {
+    void OnEnable() {
+        UnitRegistry.Register(this); // → Dispara OnUnitSpawned via Registry
+    }
+    
+    void OnDisable() {
+        UnitRegistry.Unregister(this); // → Dispara OnUnitDespawned via Registry
+    }
+    
+    public void SetSelected(bool value) {
+        if (IsSelected == value) return;
+        IsSelected = value;
+        
+        // Highlight visual...
+        
+        GameEvents.RaiseUnitSelectionChanged(this, value); // ← Disparo direto
+    }
+    
+    public void AddXp(float amount) {
+        xp += amount;
+        // Level up logic...
+        
+        GameEvents.RaiseUnitProgressChanged(this); // ← Disparo direto
+    }
+}
+
+// Minimap escuta spawn/despawn
+public class MinimapSystem : MonoBehaviour {
+    Dictionary<Unit, GameObject> _icons = new();
+    
+    void OnEnable() {
+        GameEvents.OnUnitSpawned += OnUnitSpawned;
+        GameEvents.OnUnitDespawned += OnUnitDespawned;
+    }
+    
+    void OnDisable() {
+        GameEvents.OnUnitSpawned -= OnUnitSpawned;
+        GameEvents.OnUnitDespawned -= OnUnitDespawned;
+    }
+    
+    void OnUnitSpawned(Unit unit) {
+        var icon = Instantiate(iconPrefab, minimapContainer);
+        icon.GetComponent<Image>().color = GetFactionColor(unit.owner);
+        _icons[unit] = icon;
+    }
+    
+    void OnUnitDespawned(Unit unit) {
+        if (_icons.TryGetValue(unit, out GameObject icon)) {
+            Destroy(icon);
+            _icons.Remove(unit);
+        }
+    }
+}
+
+// UI escuta progressão
+public class UnitListItemUI : MonoBehaviour {
+    Unit _unit;
+    
+    void OnEnable() {
+        GameEvents.OnUnitProgressChanged += OnProgressChanged;
+    }
+    
+    void OnDisable() {
+        GameEvents.OnUnitProgressChanged -= OnProgressChanged;
+    }
+    
+    void OnProgressChanged(Unit changedUnit) {
+        // Filtrar apenas a unidade vinculada
+        if (changedUnit == _unit) {
+            UpdateXPBar(_unit.Xp01);
+            UpdateLevelText(_unit.Level);
+        }
+    }
+}
+```
+
+---
+
+#### 2.4.6 Eventos de Seleção
+
+**Responsabilidade:** Comunicar interações do jogador com input de seleção.
+
+**NOTA:** Estes eventos foram adicionados na refatoração do Módulo Selection (Lote 4) para eliminar eventos locais.
+
+| Evento | Assinatura | Quando Dispara | Emissor | Listeners Típicos |
+|--------|-----------|----------------|---------|-------------------|
+| `OnSelectionChanged` | `Action<IReadOnlyCollection<Unit>>` | Seleção muda (add/remove) | `SelectionManager` | UI (lista), Minimap, Audio |
+| `OnUnitClick` | `Action<Unit, bool>` | Jogador clica unidade | `InputSelection` | `SelectionManager`, Debug |
+| `OnUnitDoubleClick` | `Action<Unit>` | Jogador duplo-clica | `InputSelection` | `SelectionManager`, Debug |
+| `OnGroundClick` | `Action<Vector3, bool>` | Jogador clica terreno | `InputSelection` | Comandos (futuro), Debug |
+| `OnDragBegin` | `Action<Vector2>` | Inicia drag de seleção | `InputSelection` | `SelectionManager`, `DragRectRenderer` |
+| `OnDragging` | `Action<Vector2>` | Durante drag | `InputSelection` | `DragRectRenderer` |
+| `OnDragEnd` | `Action<Vector2>` | Finaliza drag | `InputSelection` | `SelectionManager`, `DragRectRenderer` |
+| `OnPointerDown` | `Action<Vector2>` | LMB pressionado | `InputSelection` | Debug, Analytics |
+| `OnPointerUp` | `Action<Vector2>` | LMB liberado | `InputSelection` | Debug, Analytics |
+
+**Fluxo de Seleção via GameEvents:**
+
+```
+    Jogador clica unidade
+           │
+           ▼
+   ┌───────────────┐
+   │ InputSelection│ (detecta clique)
+   └───────┬───────┘
+           │ GameEvents.RaiseUnitClick(unit, ctrl)
+           ▼
+   ┌───────────────┐
+   │  GameEvents   │ (propaga)
+   └───────┬───────┘
+           │
+           ├─────────────────┬─────────────────┐
+           ▼                 ▼                 ▼
+   ┌──────────────┐  ┌─────────────┐  ┌──────────┐
+   │ Selection    │  │ Debug       │  │ Analytics│
+   │ Manager      │  │ Logger      │  │ System   │
+   └───────┬──────┘  └─────────────┘  └──────────┘
+           │ (processa seleção)
+           │ GameEvents.RaiseSelectionChanged(units)
+           ▼
+   ┌───────────────┐
+   │  GameEvents   │
+   └───────┬───────┘
+           │
+           ├─────────────────┬─────────────────┐
+           ▼                 ▼                 ▼
+   ┌──────────────┐  ┌─────────────┐  ┌──────────┐
+   │ UnitList UI  │  │ Minimap     │  │ Audio    │
+   └──────────────┘  └─────────────┘  └──────────┘
+```
+
+**Exemplo de Uso:**
+
+```csharp
+// InputSelection dispara evento de clique
+public class InputSelection : MonoBehaviour {
+    void HandleClick(Vector2 screenPos) {
+        if (picker.TryPickUnitAt(screenPos, out var unit)) {
+            bool ctrl = IsCtrlPressed;
+            GameEvents.RaiseUnitClick(unit, ctrl); // ← Disparo
+        }
+    }
+}
+
+// SelectionManager escuta e processa
+public class SelectionManager : MonoBehaviour {
+    void OnEnable() {
+        GameEvents.OnUnitClick += HandleClickUnit;
+    }
+    
+    void HandleClickUnit(Unit unit, bool ctrl) {
+        if (ctrl) Toggle(unit);
+        else { Clear(); Add(unit); }
+        
+        GameEvents.RaiseSelectionChanged(_selection); // ← Dispara outro evento
+    }
+}
+
+// UI escuta seleção final
+public class UnitListUI : MonoBehaviour {
+    void OnEnable() {
+        GameEvents.OnSelectionChanged += UpdateList;
+    }
+    
+    void UpdateList(IReadOnlyCollection<Unit> units) {
+        // Reconstruir lista de UI...
+    }
+}
+```
+
+---
+
+#### 2.4.7 Eventos de Input/Pointer
+
+**Responsabilidade:** Comunicar eventos brutos de input (usado para debug/analytics).
+
+| Evento | Assinatura | Quando Dispara | Emissor | Listeners Típicos |
+|--------|-----------|----------------|---------|-------------------|
+| `OnPointerDown` | `Action<Vector2>` | LMB pressionado | `InputSelection` | Debug Systems, Analytics |
+| `OnPointerUp` | `Action<Vector2>` | LMB liberado | `InputSelection` | Debug Systems, Analytics |
+
+**Nota:** Estes eventos são de baixo nível e raramente usados diretamente. Prefira eventos de alto nível (`OnUnitClick`, `OnSelectionChanged`).
+
+---
+
+### 2.5 Raise Helpers (31 Métodos)
+
+**Todos os eventos possuem um método helper `RaiseXXX()` para disparo:**
+
+```csharp
+// ==================== RAISE HELPERS ====================
+
+// --- Tempo ---
+public static void RaiseTimeOfDay(float t01)
+    => OnTimeOfDay01?.Invoke(Mathf.Clamp01(t01));
+
+public static void RaiseDayChanged(int day)
+    => OnDayChanged?.Invoke(day);
+
+public static void RaiseClockChanged(int day, int hour, int minute)
+    => OnClockChanged?.Invoke(day, hour, minute);
+
+// --- Economia ---
+public static void RaiseResourceGathered(FactionId who, ResourceType type, int amount)
+    => OnResourceGathered?.Invoke(who, type, amount);
+
+// --- Diplomacia ---
+public static void RaiseReputationMatrixReady()
+    => OnReputationMatrixReady?.Invoke();
+
+public static void RaiseReputationChanged(FactionId a, FactionId b, float v)
+    => OnReputationChanged?.Invoke(a, b, v);
+
+// --- Câmera ---
+public static void RaiseCameraShake(float amplitude = 1.2f, float frequency = 2.0f, float duration = 0.25f)
+    => OnCameraShake?.Invoke(amplitude, frequency, duration);
+
+public static void RaiseCameraFocus(Vector3 worldPos, bool snap = false, float duration = 0.4f)
+    => OnCameraFocus?.Invoke(worldPos, snap, duration);
+
+public static void RaiseCameraFocusXZ(Vector2 worldXZ, bool snap = false, float duration = 0.4f)
+    => OnCameraFocusXZ?.Invoke(worldXZ, snap, duration);
+
+public static void RaiseCutsceneStart(Transform target, float fov = 50f, int priority = 100)
+    => OnCutsceneStart?.Invoke(target, fov, priority);
+
+public static void RaiseCutsceneEnd()
+    => OnCutsceneEnd?.Invoke();
+
+// --- Seleção / Minimap ---
+public static void RaiseMinimapPing(Vector2 worldXZ)
+    => OnMinimapPing?.Invoke(worldXZ);
+
+public static void RaiseSelectionFocus(Transform target)
+    => OnSelectionFocus?.Invoke(target);
+
+// --- Unidades ---
+public static void RaiseUnitSpawned(Unit unit)
+    => OnUnitSpawned?.Invoke(unit);
+
+public static void RaiseUnitDespawned(Unit unit)
+    => OnUnitDespawned?.Invoke(unit);
+
+public static void RaiseUnitSelectionChanged(Unit unit, bool isSelected)
+    => OnUnitSelectionChanged?.Invoke(unit, isSelected);
+
+public static void RaiseUnitProgressChanged(Unit unit)
+    => OnUnitProgressChanged?.Invoke(unit);
+
+// --- Seleção (Input) ---
+public static void RaiseSelectionChanged(IReadOnlyCollection<Unit> selection)
+    => OnSelectionChanged?.Invoke(selection);
+
+public static void RaiseUnitClick(Unit unit, bool ctrlPressed)
+    => OnUnitClick?.Invoke(unit, ctrlPressed);
+
+public static void RaiseUnitDoubleClick(Unit unit)
+    => OnUnitDoubleClick?.Invoke(unit);
+
+public static void RaiseGroundClick(Vector3 worldPoint, bool ctrlPressed)
+    => OnGroundClick?.Invoke(worldPoint, ctrlPressed);
+
+public static void RaiseDragBegin(Vector2 screenPos)
+    => OnDragBegin?.Invoke(screenPos);
+
+public static void RaiseDragging(Vector2 screenPos)
+    => OnDragging?.Invoke(screenPos);
+
+public static void RaiseDragEnd(Vector2 screenPos)
+    => OnDragEnd?.Invoke(screenPos);
+
+public static void RaisePointerDown(Vector2 screenPos)
+    => OnPointerDown?.Invoke(screenPos);
+
+public static void RaisePointerUp(Vector2 screenPos)
+    => OnPointerUp?.Invoke(screenPos);
+```
+
+**Convenção de Nomenclatura:**
+- Evento: `OnXXX` (ex: `OnTimeOfDay01`)
+- Helper: `RaiseXXX()` (ex: `RaiseTimeOfDay()`)
+
+---
+
+### 2.6 Padrões de Uso
+
+#### **Padrão 1: Subscribe/Unsubscribe (CRÍTICO)**
+
+**✅ SEMPRE faça subscribe em `OnEnable()` e unsubscribe em `OnDisable()`:**
+
+```csharp
+public class MySystem : MonoBehaviour {
+    void OnEnable() {
+        GameEvents.OnTimeOfDay01 += HandleTimeChange;
+        GameEvents.OnSelectionChanged += HandleSelection;
+    }
+    
+    void OnDisable() {
+        // CRÍTICO: sempre desinscrever para evitar memory leaks
+        GameEvents.OnTimeOfDay01 -= HandleTimeChange;
+        GameEvents.OnSelectionChanged -= HandleSelection;
+    }
+    
+    void HandleTimeChange(float t01) { /* ... */ }
+    void HandleSelection(IReadOnlyCollection<Unit> units) { /* ... */ }
+}
+```
+
+**❌ NÃO faça subscribe em `Start()` ou `Awake()`:**
+
+```csharp
+// ❌ ERRADO: Memory leak quando GameObject é destruído
+void Start() {
+    GameEvents.OnTimeOfDay01 += HandleTimeChange;
+    // Faltou desinscrever no OnDisable!
+}
+```
+
+---
+
+#### **Padrão 2: Filtrar Eventos por Contexto**
+
+**Nem todos os eventos são relevantes para todos os listeners. Filtre no handler:**
+
+```csharp
+public class PlayerUI : MonoBehaviour {
+    [SerializeField] FactionId myFaction;
+    
+    void OnEnable() {
+        GameEvents.OnResourceGathered += OnResourceGathered;
+    }
+    
+    void OnResourceGathered(FactionId who, ResourceType type, int amount) {
+        // Filtrar: só nos importamos com recursos da nossa facção
+        if (who != myFaction) return;
+        
+        // Processar recurso...
+        UpdateResourceDisplay(type, amount);
+    }
+}
+```
+
+---
+
+#### **Padrão 3: Validação de Nulidade**
+
+**Sempre valide parâmetros antes de processar:**
+
+```csharp
+void OnUnitSpawned(Unit unit) {
+    if (unit == null) return; // Guard clause
+    
+    // Processar...
+}
+```
+
+---
+
+#### **Padrão 4: Evitar Lógica Pesada em Handlers**
+
+**Handlers devem ser rápidos. Use flags ou filas para processamento posterior:**
+
+```csharp
+// ✅ BOM: Marca para processar no próximo Update()
+bool _needsRefresh = false;
+
+void OnEnable() {
+    GameEvents.OnSelectionChanged += _ => _needsRefresh = true;
+}
+
+void Update() {
+    if (_needsRefresh) {
+        RefreshExpensiveUI(); // Processamento pesado aqui
+        _needsRefresh = false;
+    }
+}
+
+// ❌ RUIM: Lógica pesada no handler
+void OnSelectionChanged(IReadOnlyCollection<Unit> units) {
+    // Reconstruir toda UI aqui pode causar lag
+    RebuildEntireUIFromScratch(); // ❌
+}
+```
+
+---
+
+### 2.7 Integração com Módulos
+
+**Mapa de Dependências do GameEvents:**
+
+```
+                      ┌─────────────┐
+                      │ GameEvents  │
+                      │  (static)   │
+                      └──────┬──────┘
+                             │
+        ┌────────────────────┼────────────────────┐
+        │                    │                    │
+        ▼                    ▼                    ▼
+┌───────────────┐    ┌──────────────┐    ┌──────────────┐
+│  EMISSORES    │    │  EVENT BUS   │    │  LISTENERS   │
+├───────────────┤    ├──────────────┤    ├──────────────┤
+│ TimeManager   │───▶│ OnTimeOfDay  │───▶│ Luz, UI      │
+│ FactionService│───▶│ OnReputation │───▶│ IA, UI       │
+│ Unit          │───▶│ OnUnitXXX    │───▶│ UI, Minimap  │
+│ InputSelection│───▶│ OnUnitClick  │───▶│ Selection    │
+│ SelectionMgr  │───▶│ OnSelection  │───▶│ UI, Audio    │
+│ CombatSystem  │───▶│ OnCameraShake│───▶│ Camera       │
+└───────────────┘    └──────────────┘    └──────────────┘
+```
+
+**Tabela de Integração por Módulo:**
+
+| Módulo | Eventos Emitidos | Eventos Escutados | Arquivo Principal |
+|--------|------------------|-------------------|-------------------|
+| **Lote 1 - Variáveis Globais** | Tempo, Economia, Diplomacia | - | `TimeManager.cs`, `FactionService.cs` |
+| **Lote 2 - Câmera** | - | OnCameraShake, OnCameraFocus, OnCutsceneXXX | `RTSCameraController.cs` |
+| **Lote 3 - Unit** | OnUnitSpawned, OnUnitXXX | - | `Unit.cs`, `UnitRegistry.cs` |
+| **Lote 4 - Selection** | OnSelectionChanged, OnUnitClick, OnDragXXX | OnUnitClick, OnGroundClick, OnDragXXX | `InputSelection.cs`, `SelectionManager.cs` |
+| **UI System** | - | Todos (filtrado por relevância) | `UnitListUI.cs`, `ClockUI.cs`, etc. |
+
+---
+
+### 2.8 Boas Práticas (Subscribe/Unsubscribe)
+
+#### **✅ Checklist de Boas Práticas:**
+
+- [ ] **SEMPRE** subscribe em `OnEnable()` e unsubscribe em `OnDisable()`
+- [ ] **NUNCA** subscribe em `Start()` ou `Awake()` sem desinscrever
+- [ ] **FILTRAR** eventos irrelevantes no handler (ex: facção errada)
+- [ ] **VALIDAR** nulidade de parâmetros antes de processar
+- [ ] **EVITAR** lógica pesada em handlers (usar flags/filas)
+- [ ] **USAR** lambda com cautela (dificulta unsubscribe)
+- [ ] **DOCUMENTAR** quais eventos o sistema escuta (comentário na classe)
+
+#### **Exemplo de Classe Bem Estruturada:**
+
+```csharp
+/// <summary>
+/// Sistema de UI que exibe informações de tempo e seleção.
+/// Escuta: OnClockChanged, OnSelectionChanged
+/// </summary>
+public class GameHUD : MonoBehaviour {
+    [SerializeField] TMP_Text clockText;
+    [SerializeField] TMP_Text selectionCountText;
+    
+    void OnEnable() {
+        // ✅ Subscribe
+        GameEvents.OnClockChanged += UpdateClock;
+        GameEvents.OnSelectionChanged += UpdateSelectionCount;
+    }
+    
+    void OnDisable() {
+        // ✅ Unsubscribe (CRÍTICO)
+        GameEvents.OnClockChanged -= UpdateClock;
+        GameEvents.OnSelectionChanged -= UpdateSelectionCount;
+    }
+    
+    void UpdateClock(int day, int hour, int minute) {
+        clockText.text = $"D{day} {hour:00}:{minute:00}";
+    }
+    
+    void UpdateSelectionCount(IReadOnlyCollection<Unit> units) {
+        selectionCountText.text = $"Selecionadas: {units.Count}";
+    }
+}
+```
+
+---
+
+## 3) ENUMS GLOBAIS
+
+### 3.1 Visão Geral
+
+**Responsabilidade:** Definir tipos enumerados usados transversalmente por todos os sistemas do jogo.
+
+**Arquivo:** `Enums.cs`
+
+### 3.2 Lista Completa de Enums
+
+#### **FactionId**
+
+```csharp
+public enum FactionId { 
+    Neutral = 0, 
+    Player1 = 1, 
+    Player2 = 2, 
+    Player3 = 3, 
+    Player4 = 4, 
+    PvE = 3 
+}
+```
+
+**Uso:** Identificar facção proprietária de unidades/construções, chave na matriz de reputação.
+
+**Nota:** `PvE = 3` é alias para `Player3` (usado em missões de campanha).
+
+---
+
+#### **ResourceType**
+
+```csharp
+public enum ResourceType { 
+    Wood, 
+    Stone, 
+    Iron, 
+    Mithril, 
+    Food, 
+    Gold 
+}
+```
+
+**Uso:** Tipo de recurso em eventos de economia, inventário, custos de construção/treino.
+
+---
+
+#### **DamageType**
+
+```csharp
+public enum DamageType { 
+    Slashing,  // Espadas, machados
+    Piercing,  // Flechas, lanças
+    Blunt,     // Maças, martelos
+    Siege,     // Catapultas, arietes
+    Fire,      // Magia de fogo, flechas incendiárias
+    Magic      // Magia arcana
+}
+```
+
+**Uso:** Sistema de combate (futuro) para bônus/penalidades por tipo de armadura.
+
+---
+
+#### **TerrainType**
+
+```csharp
+public enum TerrainType { 
+    Normal,    // Grama, terra
+    Mud,       // Lama (penalidade de movimento)
+    Snow,      // Neve (upkeep extra)
+    Sand,      // Areia (penalidade de movimento)
+    RoadDirt,  // Estrada de terra (bônus de movimento)
+    RoadPaved  // Estrada pavimentada (bônus maior)
+}
+```
+
+**Uso:** Sistema de pathfinding (futuro) para modificadores de velocidade.
+
+**Relacionamento com GameConfig:**
+- `mudSandMovePenalty`: Penalidade para Mud e Sand
+- `snowExtraUpkeep`: Upkeep adicional em Snow
+
+---
+
+#### **UnitType**
+
+```csharp
+public enum UnitType { 
+    Worker,       // Operário (coleta recursos)
+    Warrior,      // Guerreiro corpo-a-corpo
+    Spearman,     // Lanceiro (anti-cavalaria)
+    Archer,       // Arqueiro (ranged)
+    CavalryLight, // Cavalaria leve
+    Ram,          // Aríete (siege)
+    Catapult,     // Catapulta (siege ranged)
+    Hero          // Herói (único, poderoso)
+}
+```
+
+**Uso:** Classificação de unidades em `UnitDefinition`, filtros de UI, IA, balanceamento.
+
+---
+
+### 3.3 Exemplos de Uso
 
 ```csharp
 // Selecionar cor da UI pela facção
@@ -215,285 +1026,1151 @@ var fdef = factionDb.Get(FactionId.Player1);
 uiTeamBanner.color = fdef.color;
 
 // Ajustar dano por tipo
-if (attack.DamageType == DamageType.Siege) ApplyBonusVsStructures();
+if (attack.DamageType == DamageType.Siege) {
+    ApplyBonusVsStructures();
+}
+
+// Filtrar unidades por tipo
+var workers = UnitRegistry.All.Where(u => u.def.type == UnitType.Worker);
+
+// Calcular penalidade de terreno
+float moveSpeed = baseSpeed;
+if (currentTerrain == TerrainType.Mud) {
+    moveSpeed *= (1f - gameConfig.mudSandMovePenalty);
+}
 ```
 
 ---
 
-### GameConfig (ScriptableObject)
+## 4) GAMECONFIG - CONFIGURAÇÃO GLOBAL
 
-**Campos:**
+### 4.1 Visão Geral
 
-**Tempo:**
-- `float secondsPerDay`
-- `float dayFraction`
+**Tipo:** `ScriptableObject`  
+**Responsabilidade:** Armazenar configurações globais do jogo (tempo, economia, penalidades, custos).
 
-**Clima/Mod.:**
-- `float nightVisionPenalty`
-- `float fogVisionPenalty`
-- `float mudSandMovePenalty`
-- `float snowExtraUpkeep`
+**Criação:** `Assets > Create > Game > Config`
 
-**Economia:**
-- `float baselineGatherMinTotal`
-- `int baselineGatherPer3Min`
-- `int workerCarryCapacity`
+### 4.2 Campos Públicos (Inspector)
 
-**Unid. especiais:**
-- `float merchantSpeedHexPerSec`
-- `int merchantCapacity`
-- `int merchantCostGold`
-
-**Reparos:**
-- `float structureRepairHpPerSec`
-
-**Helpers:**
-- `float BaselinePerSecond { get; }`
-- `float SecondsPerDay { get; }`
-
-**Exemplos de uso:**
+#### **Tempo**
 
 ```csharp
-// Converter baseline por segundo
+[Header("Tempo")]
+[Tooltip("Duração de 1 dia do jogo (em segundos reais). Demo: 600s = 10min")]
+public float secondsPerDay = 600f;
+
+[Range(0.1f, 0.9f)] 
+public float dayFraction = 0.5f; // 50% dia / 50% noite
+```
+
+**Uso:**
+- `secondsPerDay`: Controla velocidade do ciclo dia/noite
+- `dayFraction`: Define quando noite começa (0.5 = metade do dia)
+
+---
+
+#### **Clima/Modificadores**
+
+```csharp
+[Header("Clima/Modificadores (demo - provisório)")]
+[Tooltip("Penalidade de visão à noite (ex.: 0.2 = -20%)")]
+[Range(0f, 1f)] public float nightVisionPenalty = 0.20f;
+
+[Range(0f, 1f)] public float fogVisionPenalty = 0.10f;
+[Range(0f, 1f)] public float mudSandMovePenalty = 0.20f;
+[Range(0f, 1f)] public float snowExtraUpkeep = 0.15f;
+```
+
+**Uso:**
+- `nightVisionPenalty`: Redução de visão à noite (Fog of War)
+- `fogVisionPenalty`: Redução adicional em clima de neblina
+- `mudSandMovePenalty`: Redução de velocidade em Mud/Sand
+- `snowExtraUpkeep`: Custo extra de manutenção em Snow
+
+---
+
+#### **Economia - Baseline**
+
+```csharp
+[Header("Economia — baseline (demo)")]
+[Tooltip("Em cenário ideal (depósito ~3 hex), um operário colhe 10 a cada 3 min.")]
+public float baselineGatherMinTotal = 3;
+public int baselineGatherPer3Min = 10;
+
+[Tooltip("Capacidade do operário por viagem.")]
+public int workerCarryCapacity = 10;
+```
+
+**Uso:**
+- `baselineGatherMinTotal`: Tempo de coleta em cenário ideal (minutos)
+- `baselineGatherPer3Min`: Quantidade coletada nesse tempo
+- `workerCarryCapacity`: Máximo que operário carrega por viagem
+
+---
+
+#### **Unidades Especiais**
+
+```csharp
+[Header("Unidades especiais (demo)")]
+public float merchantSpeedHexPerSec = 0.5f;
+public int merchantCapacity = 20;
+public int merchantCostGold = 30;
+```
+
+**Uso:** Configurações de unidades especiais (Mercadores, Heróis, etc.)
+
+---
+
+#### **Reparos**
+
+```csharp
+[Header("Reparos")]
+public float structureRepairHpPerSec = 0.5f;
+```
+
+**Uso:** Taxa de reparo de estruturas (HP por segundo).
+
+---
+
+### 4.3 Helpers Públicos
+
+```csharp
+/// <summary>
+/// Converte baseline de coleta para recursos por segundo.
+/// Exemplo: 10 recursos / 180 segundos = ~0.055 recursos/segundo
+/// </summary>
+public float BaselinePerSecond => baselineGatherPer3Min / (baselineGatherMinTotal * 60);
+
+/// <summary>
+/// Alias para secondsPerDay (para consistência de nomenclatura).
+/// </summary>
+public float SecondsPerDay => secondsPerDay;
+```
+
+**Exemplo de Uso:**
+
+```csharp
+// Converter baseline para taxa por segundo
 float perSec = gameConfig.BaselinePerSecond;
+Debug.Log($"Taxa de coleta: {perSec:F3} recursos/segundo");
 
-// Checar se é noite com o threshold global
-bool isNight = timeManager.IsNight();
+// Calcular recursos coletados em 1 minuto
+float resourcesPer Minute = gameConfig.BaselinePerSecond * 60f;
 ```
 
 ---
 
-### GameEvents (static) - ATUALIZADO
+### 4.4 Exemplo de Asset
 
-**Eventos (subscribe/unsubscribe):**
+**Arquivo:** `Assets/Settings/GameConfig.asset`
 
-#### Tempo
-- `Action<float> OnTimeOfDay01` — fração 0..1 do dia
-- `Action<int> OnDayChanged` — incrementa no loop diário
-- `Action<int,int,int> OnClockChanged` — dia, hora, minuto
-
-#### Economia
-- `Action<FactionId, ResourceType, int> OnResourceGathered`
-
-#### Diplomacia
-- `Action OnReputationMatrixReady` — reputação seed pronta
-- `Action<FactionId,FactionId,float> OnReputationChanged` — mudança A→B
-
-#### Câmera (NOVO)
-- `Action<float, float, float> OnCameraShake` — shake com amplitude, frequency, duration
-- `Action<Vector3, bool, float> OnCameraFocus` — foco em posição 3D
-- `Action<Vector2, bool, float> OnCameraFocusXZ` — foco em posição XZ (mini-mapa)
-- `Action<Transform, float, int> OnCutsceneStart` — iniciar cutscene
-- `Action OnCutsceneEnd` — finalizar cutscene
-
-#### Seleção/Minimap (NOVO)
-- `Action<Vector2> OnMinimapPing` — ping no mini-mapa
-- `Action<Transform> OnSelectionFocus` — foco em unidade selecionada
-
-**Helpers (raise):**
-
-```csharp
-// Tempo
-RaiseTimeOfDay(float)
-RaiseDayChanged(int)
-RaiseClockChanged(int, int, int)
-
-// Economia
-RaiseResourceGathered(FactionId, ResourceType, int)
-
-// Diplomacia
-RaiseReputationMatrixReady()
-RaiseReputationChanged(FactionId, FactionId, float)
-
-// Câmera
-RaiseCameraShake(float amplitude, float frequency, float duration)
-RaiseCameraFocus(Vector3 worldPos, bool snap, float duration)
-RaiseCameraFocusXZ(Vector2 worldXZ, bool snap, float duration)
-RaiseCutsceneStart(Transform target, float fov, int priority)
-RaiseCutsceneEnd()
-
-// Seleção/Minimap
-RaiseMinimapPing(Vector2 worldXZ)
-RaiseSelectionFocus(Transform target)
+```
+secondsPerDay: 600 (10 minutos de dia real = 1 dia de jogo)
+dayFraction: 0.5 (metade do dia é luz, metade é noite)
+nightVisionPenalty: 0.2 (-20% de visão à noite)
+mudSandMovePenalty: 0.2 (-20% de velocidade em lama/areia)
+baselineGatherPer3Min: 10 (10 recursos em 3 minutos)
+workerCarryCapacity: 10 (10 recursos por viagem)
 ```
 
-**Exemplo de uso (UI/Clock):**
+---
+
+## 5) GAMECONTEXT - ORQUESTRADOR CENTRAL
+
+### 5.1 Visão Geral
+
+**Tipo:** `MonoBehaviour`  
+**Responsabilidade:** Ponto único de inicialização e orquestração. Injeta configurações e inicializa serviços na ordem correta.
+
+**Localização na Cena:** GameObject `_GameContext` na raiz da hierarquia.
+
+### 5.2 Campos Públicos (Inspector)
+
+```csharp
+public GameConfig config;              // Referência ao ScriptableObject de config
+public FactionDatabase factions;       // Banco de dados de facções
+public FactionService factionService;  // Serviço de reputação (runtime)
+public TimeManager timeManager;        // Gerenciador de tempo
+```
+
+**Screenshot do Inspector:**
+
+![GameContext Inspector](reference://1761266286926_image.png)
+
+**Configuração Típica:**
+- `Config`: Arraste o asset `GameConfig.asset`
+- `Factions`: Arraste o asset `FactionDatabase.asset`
+- `Faction Service`: Arraste o componente `FactionService` (mesmo GameObject ou filho)
+- `Time Manager`: Arraste o componente `TimeManager` (mesmo GameObject ou filho)
+
+---
+
+### 5.3 Método `Awake()` (Inicialização)
+
+```csharp
+void Awake() {
+    // 1. Inicializar matriz de reputação de facções
+    if (factionService != null) 
+        factionService.Init();
+    
+    // 2. Injetar config no TimeManager
+    if (timeManager != null) 
+        timeManager.config = config;
+}
+```
+
+**Ordem de Inicialização:**
+1. **FactionService.Init()**: Cria matriz de reputação baseada em `FactionDatabase`
+2. **TimeManager.config**: Injeta configurações de tempo
+
+**Nota:** `Awake()` é executado **antes** de qualquer `Start()`, garantindo que serviços estejam prontos quando outros sistemas iniciarem.
+
+---
+
+### 5.4 Fluxo de Inicialização Detalhado
+
+```
+Unity Scene Load
+       │
+       ▼
+GameContext.Awake()
+       │
+       ├──▶ 1. FactionService.Init()
+       │         │
+       │         ├──▶ Carrega FactionDatabase
+       │         ├──▶ Cria matriz A→B (todas combinações)
+       │         ├──▶ Popula com initialReputation
+       │         └──▶ GameEvents.RaiseReputationMatrixReady()
+       │
+       └──▶ 2. TimeManager.config = config
+                 │
+                 └──▶ TimeManager agora tem acesso a:
+                      • secondsPerDay
+                      • dayFraction
+                      • Outros parâmetros de tempo
+       │
+       ▼
+Todos os outros scripts executam Start()
+       │
+       ▼
+Jogo começa (Update loop)
+```
+
+---
+
+### 5.5 Exemplo de Uso
+
+**Setup na Cena:**
+
+1. Criar GameObject vazio: `_GameContext`
+2. Adicionar componente `GameContext`
+3. Adicionar componentes filhos:
+   - `FactionService`
+   - `TimeManager`
+4. No Inspector de `GameContext`:
+   - Arrastar `GameConfig.asset` para campo `Config`
+   - Arrastar `FactionDatabase.asset` para campo `Factions`
+   - Arrastar componentes filhos para campos respectivos
+
+---
+
+## 6) TIMEMANAGER - SISTEMA DE TEMPO
+
+### 6.1 Visão Geral
+
+**Tipo:** `MonoBehaviour`  
+**Responsabilidade:** Avança relógio global, converte fração do dia em HH:MM, emite eventos de tempo via GameEvents.
+
+### 6.2 Campos Públicos (Inspector)
+
+```csharp
+public GameConfig config; // Injetado por GameContext
+[Range(0f, 1f)] public float startTime01 = 0.25f; // 0 = amanhecer, 0.5 = pôr-do-sol
+```
+
+**Configuração:**
+- `config`: **Não atribuir manualmente**. Injetado por `GameContext.Awake()`
+- `startTime01`: Horário inicial do jogo (0 = meia-noite, 0.25 = 6h, 0.5 = meio-dia)
+
+---
+
+### 6.3 Propriedades Públicas (Read-Only)
+
+```csharp
+[field: SerializeField]
+public float Time01 { get; private set; } // Fração do dia (0..1)
+
+[field: SerializeField]
+public int DayCount { get; private set; } // Dia atual (0, 1, 2...)
+
+[field: SerializeField]
+public int Hour { get; private set; } // Hora (0-23)
+
+[field: SerializeField]
+public int Minute { get; private set; } // Minuto (0-59)
+```
+
+**Nota:** `[field: SerializeField]` torna propriedades visíveis no Inspector para debug.
+
+---
+
+### 6.4 Métodos Públicos
+
+```csharp
+/// <summary>
+/// Verifica se é noite baseado em Time01 e config.dayFraction.
+/// </summary>
+/// <returns>True se Time01 >= config.dayFraction</returns>
+public bool IsNight()
+```
+
+**Exemplo:**
+```csharp
+if (timeManager.IsNight()) {
+    float visionPenalty = gameConfig.nightVisionPenalty;
+    ApplyVisionReduction(visionPenalty);
+}
+```
+
+---
+
+### 6.5 Lógica Interna (Update)
+
+**Algoritmo:**
+
+1. **Calcular Delta de Tempo:**
+   ```csharp
+   float delta01 = Time.deltaTime / config.SecondsPerDay;
+   ```
+   - Exemplo: Se `SecondsPerDay = 600s` e `Time.deltaTime = 0.016s` (60 FPS):
+   - `delta01 = 0.016 / 600 = 0.0000266` (0.00266% do dia por frame)
+
+2. **Avançar Relógio:**
+   ```csharp
+   float old = Time01;
+   Time01 = Mathf.Repeat(Time01 + delta01, 1f);
+   ```
+   - `Mathf.Repeat()` faz loop automático (0.999 + 0.002 = 0.001)
+
+3. **Detectar Virada de Dia:**
+   ```csharp
+   if (Time01 < old) { // Voltou para 0
+       DayCount++;
+       GameEvents.RaiseDayChanged(DayCount);
+   }
+   ```
+
+4. **Converter para HH:MM:**
+   ```csharp
+   int totalMinutes = Mathf.FloorToInt(Time01 * 1440f); // 24h * 60min
+   Hour = (totalMinutes / 60) % 24;
+   Minute = totalMinutes % 60;
+   ```
+
+5. **Disparar Eventos:**
+   ```csharp
+   if (Minute != _lastMinute) {
+       _lastMinute = Minute;
+       GameEvents.RaiseClockChanged(DayCount, Hour, Minute); // Cada minuto
+   }
+   GameEvents.RaiseTimeOfDay(Time01); // Todo frame
+   ```
+
+---
+
+### 6.6 Exemplo de Conversão Tempo
+
+| Time01 | Hora (HH:MM) | Período |
+|--------|-------------|---------|
+| 0.00 | 00:00 | Meia-noite |
+| 0.25 | 06:00 | Amanhecer |
+| 0.50 | 12:00 | Meio-dia |
+| 0.75 | 18:00 | Entardecer |
+| 1.00 | 00:00 (próximo dia) | Meia-noite |
+
+**Exemplo de Velocidade:**
+- `secondsPerDay = 600` (10 minutos reais = 1 dia de jogo)
+- 1 hora de jogo = 600s / 24h = **25 segundos reais**
+- 1 minuto de jogo = 25s / 60min = **0.416 segundos reais**
+
+---
+
+## 7) MÓDULO FACTIONS
+
+### 7.1 Visão Geral
+
+**Responsabilidade:** Gerenciar facções (definições, banco de dados, reputação em runtime).
+
+**Componentes:**
+1. `FactionDefinition` (ScriptableObject) - Metadados de uma facção
+2. `FactionDatabase` (ScriptableObject) - Coleção de definições
+3. `FactionService` (MonoBehaviour) - Matriz de reputação em runtime
+
+---
+
+### 7.2 FactionDefinition
+
+**Tipo:** `ScriptableObject`  
+**Criação:** `Assets > Create > Game > Faction`
+
+#### **Campos:**
+
+```csharp
+public FactionId id;                          // Identificador único
+public string displayName = "Reino";          // Nome para UI
+public Color color = Color.white;             // Cor da facção (UI, minimapa)
+public Sprite banner;                         // Bandeira/estandarte
+[Range(0, 100)] 
+public float initialReputation = 50f;         // Reputação inicial (neutro)
+```
+
+#### **Exemplo de Uso:**
+
+```csharp
+// Obter definição de uma facção
+FactionDefinition player1 = factionDatabase.Get(FactionId.Player1);
+
+// Usar em UI
+teamBanner.sprite = player1.banner;
+teamBanner.color = player1.color;
+nameText.text = player1.displayName;
+```
+
+---
+
+### 7.3 FactionDatabase
+
+**Tipo:** `ScriptableObject`  
+**Criação:** `Assets > Create > Game > Faction Database`
+
+#### **Campos:**
+
+```csharp
+public List<FactionDefinition> factions = new();
+```
+
+#### **Métodos:**
+
+```csharp
+/// <summary>
+/// Busca definição por ID.
+/// </summary>
+/// <returns>FactionDefinition ou null se não encontrado</returns>
+public FactionDefinition Get(FactionId id) => factions.Find(f => f.id == id);
+```
+
+#### **Setup Típico:**
+
+1. Criar `FactionDatabase.asset`
+2. Adicionar definições à lista:
+   - `Faction_Player1.asset` (id: Player1, cor: Azul)
+   - `Faction_Player2.asset` (id: Player2, cor: Vermelho)
+   - `Faction_PvE.asset` (id: PvE, cor: Amarelo)
+   - etc.
+
+---
+
+### 7.4 FactionService
+
+**Tipo:** `MonoBehaviour`  
+**Responsabilidade:** Manter matriz de reputação A→B em runtime, emitir eventos de mudanças.
+
+#### **Campos:**
+
+```csharp
+[SerializeField] private FactionDatabase database; // Referência ao ScriptableObject
+```
+
+**Nota:** Campo privado, injetado via Inspector.
+
+#### **Estrutura Interna:**
+
+```csharp
+// Matriz de reputação: (A, B) → valor (0..100)
+private readonly Dictionary<(FactionId, FactionId), float> _rep = new();
+```
+
+**Exemplo de Matriz:**
+
+| A ↓ B → | Player1 | Player2 | PvE |
+|---------|---------|---------|-----|
+| **Player1** | 100 | 50 | 50 |
+| **Player2** | 50 | 100 | 30 |
+| **PvE** | 50 | 30 | 100 |
+
+**Interpretação:**
+- Player1 → Player2: 50 (neutro)
+- Player2 → PvE: 30 (hostil)
+- Diagonal sempre 100 (facção consigo mesma)
+
+---
+
+#### **Métodos Públicos:**
+
+```csharp
+/// <summary>
+/// Inicializa matriz de reputação. Chamado por GameContext.Awake().
+/// </summary>
+public void Init()
+
+/// <summary>
+/// Obtém reputação de A em relação a B (0..100).
+/// </summary>
+public float GetReputation(FactionId a, FactionId b)
+
+/// <summary>
+/// Define reputação de A em relação a B (clamp 0..100).
+/// Dispara GameEvents.OnReputationChanged.
+/// </summary>
+public void SetReputation(FactionId a, FactionId b, float value)
+
+/// <summary>
+/// Aplica delta de reputação (incremento/decremento).
+/// </summary>
+public void DeltaReputation(FactionId a, FactionId b, float delta)
+```
+
+---
+
+#### **Implementação de Init():**
+
+```csharp
+public void Init() {
+    foreach (var fa in database.factions) {
+        foreach (var fb in database.factions) {
+            var key = (fa.id, fb.id);
+            if (!_rep.ContainsKey(key))
+                _rep[key] = fa.initialReputation;
+        }
+    }
+    GameEvents.RaiseReputationMatrixReady();
+}
+```
+
+**Fluxo:**
+1. Loop duplo: para cada facção A, para cada facção B
+2. Cria entrada `(A, B)` na matriz
+3. Inicializa com `A.initialReputation`
+4. Dispara evento `OnReputationMatrixReady`
+
+---
+
+#### **Exemplo de Uso:**
+
+```csharp
+// Obter reputação
+float rep = factionService.GetReputation(FactionId.Player1, FactionId.PvE);
+if (rep < 30f) {
+    Debug.Log("Player1 é hostil a PvE!");
+}
+
+// Modificar reputação (missão concluída)
+void OnQuestCompleted(FactionId questGiver) {
+    factionService.DeltaReputation(
+        myFaction, 
+        questGiver, 
+        +15f // Melhora reputação em 15 pontos
+    );
+    // GameEvents.OnReputationChanged será disparado automaticamente
+}
+
+// Escutar mudanças de reputação
+void OnEnable() {
+    GameEvents.OnReputationChanged += OnReputationChanged;
+}
+
+void OnReputationChanged(FactionId a, FactionId b, float newValue) {
+    if (a == myFaction) {
+        Debug.Log($"Nossa reputação com {b} mudou para {newValue}");
+        UpdateDiplomacyUI();
+    }
+}
+```
+
+---
+
+## 8) PLAYERCONTROLLER
+
+### 8.1 Visão Geral
+
+**Tipo:** `MonoBehaviour`  
+**Responsabilidade:** Definir facção do jogador local e manter referência à câmera principal.
+
+**Nota:** Classe simples, mas essencial para filtros de seleção e UI.
+
+### 8.2 Campos Públicos
+
+```csharp
+[Header("Quem sou eu")]
+public FactionId myFaction = FactionId.Player1;
+
+[Header("Referências")]
+public Camera mainCamera;
+```
+
+**Uso:**
+- `myFaction`: Usado por `SelectionManager` (filtro `onlyOwnUnits`)
+- `mainCamera`: Usada por sistemas de input/raycasting
+
+### 8.3 Método `Reset()`
+
+```csharp
+private void Reset() {
+    mainCamera = Camera.main; // Auto-atribui no Inspector
+}
+```
+
+**Funcionalidade:** Quando componente é adicionado no Inspector, busca automaticamente `Camera.main`.
+
+---
+
+## 9) DAYNIGHTLIGHTCONTROLLER
+
+### 9.1 Visão Geral
+
+**Tipo:** `MonoBehaviour`  
+**Requer:** `Light` (Directional Light)  
+**Responsabilidade:** Atualizar cor/intensidade da luz direcional baseado em ciclo dia/noite.
+
+### 9.2 Campos Públicos
+
+```csharp
+public Gradient colorOverDay; // Gradiente de cores ao longo do dia
+public AnimationCurve intensityOverDay; // Curva de intensidade
+```
+
+**Configuração Padrão:**
+
+**colorOverDay (Gradient):**
+| Time | Color (RGB) | Momento |
+|------|------------|---------|
+| 0.00 | (0.85, 0.75, 0.55) | Amanhecer (laranja suave) |
+| 0.25 | (1.00, 0.95, 0.85) | Dia (branco quente) |
+| 0.50 | (1.00, 0.85, 0.60) | Pôr-do-sol (laranja intenso) |
+| 0.75 | (0.20, 0.25, 0.40) | Crepúsculo (azul escuro) |
+| 1.00 | (0.10, 0.12, 0.20) | Noite (azul muito escuro) |
+
+**intensityOverDay (AnimationCurve):**
+- Keyframe 0.00: 0.15 (amanhecer suave)
+- Keyframe 0.25: 1.0 (dia pleno)
+- Keyframe 1.00: 0.15 (noite suave)
+
+---
+
+### 9.3 Integração com GameEvents
 
 ```csharp
 void OnEnable() {
-    GameEvents.OnClockChanged += HandleClock;
+    _light = GetComponent<Light>();
+    GameEvents.OnTimeOfDay01 += Apply; // ← Escuta evento de tempo
 }
 
 void OnDisable() {
-    GameEvents.OnClockChanged -= HandleClock;
+    GameEvents.OnTimeOfDay01 -= Apply; // ← Desinscreve
 }
 
-void HandleClock(int day, int hour, int minute) {
-    clockLabel.text = $"D{day} {hour:00}:{minute:00}";
+private void Apply(float t01) {
+    _light.color = colorOverDay.Evaluate(t01);
+    _light.intensity = Mathf.Clamp01(intensityOverDay.Evaluate(t01));
+    
+    // Rotação simples do sol (opcional)
+    transform.rotation = Quaternion.Euler(
+        new Vector3((t01 * 360f) - 90f, 170f, 0f)
+    );
 }
 ```
 
-**Exemplo de uso (Câmera):**
+**Resultado:**
+- Cor da luz muda suavemente ao longo do dia
+- Intensidade varia (mais forte ao meio-dia, fraca à noite)
+- Sol "gira" no céu (opcional)
 
+---
+
+## 10) FLUXO DE INICIALIZAÇÃO
+
+### 10.1 Diagrama Completo
+
+```
+┌──────────────────────────────────────────────────────────┐
+│               Unity Scene Load                            │
+└────────────────────┬─────────────────────────────────────┘
+                     │
+                     ▼
+         ┌───────────────────────┐
+         │  GameContext.Awake()  │ (Primeira execução)
+         └───────┬───────────────┘
+                 │
+      ┌──────────┼──────────┐
+      │                     │
+      ▼                     ▼
+┌──────────────┐    ┌─────────────────┐
+│FactionService│    │   TimeManager   │
+│  .Init()     │    │ .config = config│
+└──────┬───────┘    └─────────────────┘
+       │
+       ├──▶ 1. Carrega FactionDatabase
+       ├──▶ 2. Cria matriz A→B
+       ├──▶ 3. Popula com initialReputation
+       └──▶ 4. GameEvents.RaiseReputationMatrixReady()
+                             │
+                             ▼
+                 ┌──────────────────────┐
+                 │ Sistemas escutam via │
+                 │    GameEvents        │
+                 └──────────┬───────────┘
+                            │
+                            ▼
+         ┌──────────────────────────────────┐
+         │ Todos os scripts executam Start()│
+         └──────────────────┬───────────────┘
+                            │
+                            ▼
+              ┌────────────────────────┐
+              │ TimeManager.Awake()    │
+              │ • Time01 = startTime01 │
+              │ • RaiseTimeOfDay(Time01)│
+              └────────┬───────────────┘
+                       │
+                       ▼
+         ┌────────────────────────────────┐
+         │ DayNightLightController escuta │
+         │ OnTimeOfDay01 → Aplica cor/luz │
+         └────────────────────────────────┘
+                       │
+                       ▼
+              ┌────────────────┐
+              │  Update Loop   │
+              │ (Jogo começa)  │
+              └────────────────┘
+```
+
+---
+
+### 10.2 Ordem de Execução Crítica
+
+**Unity garante que `Awake()` é executado antes de `Start()`:**
+
+1. **Awake()** de TODOS os GameObjects (ordem indeterminada)
+   - `GameContext.Awake()` executa primeiro (tipicamente)
+   - `TimeManager.Awake()` pode executar antes ou depois
+
+2. **OnEnable()** de TODOS os GameObjects
+   - Listeners se inscrevem em `GameEvents`
+
+3. **Start()** de TODOS os GameObjects (ordem indeterminada)
+   - Sistemas já têm config injetada
+
+4. **Update() Loop** começa
+   - `TimeManager.Update()` avança relógio
+   - Eventos são disparados continuamente
+
+---
+
+### 10.3 Screenshot do Setup
+
+**GameContext Inspector:**
+
+![GameContext Inspector](reference://1761266286926_image.png)
+
+**Componentes Visíveis:**
+1. **GameContext (Script)**
+   - Config: `GameConfig (Game Config)`
+   - Factions: `FactionDatabase (Faction Database)`
+   - Faction Service: `GameContext (Faction Service)`
+   - Time Manager: `GameContext (Time Manager)`
+
+2. **TimeManager (Script)**
+   - Config: `None (Game Config)` ← Injetado por GameContext
+   - Start Time 01: `0.25` (6h da manhã)
+   - Time01: `0` (atualizado em runtime)
+   - Day Count: `0`
+   - Hour: `0`
+   - Minute: `0`
+
+3. **FactionService (Script)**
+   - Database: `FactionDatabase (Faction Database)`
+
+---
+
+## 11) INTEGRAÇÃO ENTRE MÓDULOS
+
+### 11.1 Mapa de Dependências
+
+```
+                    ┌──────────────┐
+                    │  GameEvents  │
+                    │ (Event Bus)  │
+                    └──────┬───────┘
+                           │
+        ┌──────────────────┼──────────────────┐
+        │                  │                  │
+        ▼                  ▼                  ▼
+┌───────────────┐  ┌──────────────┐  ┌──────────────┐
+│  Lote 1       │  │  Lote 2      │  │  Lote 3      │
+│  (Foundation) │  │  (Camera)    │  │  (Unit)      │
+├───────────────┤  ├──────────────┤  ├──────────────┤
+│ • Enums       │  │ • RTS Camera │  │ • Unit       │
+│ • GameConfig  │  │ • CameraMath │  │ • UnitDef    │
+│ • TimeManager │  │ • Profiles   │  │ • Registry   │
+│ • Factions    │  └──────┬───────┘  └──────┬───────┘
+└───────┬───────┘         │                 │
+        │                 │                 │
+        │                 └─────────┬───────┘
+        │                           │
+        ▼                           ▼
+┌──────────────────────────────────────────────┐
+│             Lote 4 (Selection)               │
+├──────────────────────────────────────────────┤
+│ • InputSelection                             │
+│ • SelectionManager                           │
+│ • WorldPicker                                │
+└────────────────┬─────────────────────────────┘
+                 │
+                 ▼
+         ┌───────────────┐
+         │  UI System    │
+         │  (Consumer)   │
+         └───────────────┘
+```
+
+---
+
+### 11.2 Tabela de Dependências por Módulo
+
+| Módulo Consumidor | Depende De (Lote 1) | Uso |
+|-------------------|---------------------|-----|
+| **Lote 2 - Câmera** | GameEvents | Escuta OnCameraShake, OnCameraFocus, etc. |
+| **Lote 3 - Unit** | Enums (FactionId, UnitType), GameEvents | Emite OnUnitSpawned, OnUnitProgressChanged |
+| **Lote 4 - Selection** | Unit, Enums (FactionId), GameEvents, PlayerController | Filtra por facção, emite eventos de seleção |
+| **UI System** | GameEvents, Enums, UnitRegistry | Escuta OnClockChanged, OnSelectionChanged, etc. |
+| **IA System** (futuro) | GameEvents (OnReputationChanged), Enums | Reage a diplomacia, classifica unidades |
+
+---
+
+### 11.3 Fluxo de Comunicação via GameEvents
+
+**Exemplo: Seleção de Unidade → Atualização de UI**
+
+```
+Jogador clica unidade
+        │
+        ▼
+InputSelection detecta clique
+        │
+        │ GameEvents.RaiseUnitClick(unit, ctrl)
+        ▼
+┌──────────────┐
+│  GameEvents  │ (propaga)
+└──────┬───────┘
+       │
+       ├─────────────────┐
+       ▼                 ▼
+SelectionManager    DebugLogger
+ (processa)           (log)
+       │
+       │ GameEvents.RaiseSelectionChanged(units)
+       ▼
+┌──────────────┐
+│  GameEvents  │ (propaga)
+└──────┬───────┘
+       │
+       ├──────────┬──────────┬──────────┐
+       ▼          ▼          ▼          ▼
+  UnitListUI  Minimap  AudioManager  IA
+  (atualiza)  (marca)  (som "beep")  (analisa)
+```
+
+**Desacoplamento:**
+- `InputSelection` não conhece `SelectionManager`
+- `SelectionManager` não conhece `UnitListUI`
+- Fácil adicionar/remover listeners sem modificar emissores
+
+---
+
+## 12) TABELA DE RELACIONAMENTOS COMPLETA
+
+### 12.1 Classes do Lote 1
+
+| Classe | Tipo | Depende De | Dependentes | Eventos (Emit) | Eventos (Listen) |
+|--------|------|-----------|-------------|----------------|------------------|
+| **GameEvents** | static | - | TODOS | - | - |
+| **Enums** | enum | - | TODOS | - | - |
+| **GameConfig** | SO | - | TimeManager, GameContext | - | - |
+| **GameContext** | MB | GameConfig, FactionDatabase, FactionService, TimeManager | - | - | - |
+| **TimeManager** | MB | GameConfig | DayNightLightController, UI | OnTimeOfDay01, OnDayChanged, OnClockChanged | - |
+| **FactionDefinition** | SO | Enums (FactionId) | FactionDatabase | - | - |
+| **FactionDatabase** | SO | FactionDefinition | FactionService | - | - |
+| **FactionService** | MB | FactionDatabase, Enums | IA, UI | OnReputationMatrixReady, OnReputationChanged | - |
+| **PlayerController** | MB | Enums (FactionId) | SelectionManager, UnitQueries | - | - |
+| **DayNightLightController** | MB | - | - | - | OnTimeOfDay01 |
+
+**Legenda:**
+- **SO:** ScriptableObject
+- **MB:** MonoBehaviour
+- **Emit:** Eventos que a classe dispara
+- **Listen:** Eventos que a classe escuta
+
+---
+
+### 12.2 Integrações com Outros Lotes
+
+| Lote | Usa de Lote 1 | Fornece para Lote 1 |
+|------|---------------|---------------------|
+| **Lote 2 - Câmera** | GameEvents (listen), GameConfig (bounds) | Eventos de câmera (OnCameraShake, etc.) |
+| **Lote 3 - Unit** | Enums (FactionId, UnitType), GameEvents (emit) | Eventos de unidade (OnUnitSpawned, etc.) |
+| **Lote 4 - Selection** | GameEvents (emit/listen), PlayerController, Enums | Eventos de seleção (OnSelectionChanged, etc.) |
+| **UI System** | GameEvents (listen), Enums (todos) | - |
+
+---
+
+## 13) CHANGELOG E MIGRAÇÕES
+
+### 13.1 Mudanças da v2.0 → v3.0
+
+#### **✅ ADICIONADO:**
+
+1. **GameEvents - Seção Separada e Expandida:**
+   - Documentação completa de 31+ eventos (vs 12 na v2.0)
+   - 10 novos eventos de Selection adicionados
+   - Helpers `RaiseXXX()` para todos os eventos
+   - Exemplos de uso detalhados para cada categoria
+
+2. **Refatoração de Unit.cs:**
+   - Eventos locais removidos (`OnSelectionChanged`, `OnProgressChanged`)
+   - Migrado para `GameEvents.RaiseUnitSelectionChanged()` e `GameEvents.RaiseUnitProgressChanged()`
+   - Método `TestList()` movido para `#if UNITY_EDITOR`
+
+3. **Refatoração de SelectionManager.cs:**
+   - Evento local removido (`OnSelectionChanged`)
+   - Migrado para `GameEvents.RaiseSelectionChanged()`
+   - Handlers agora escutam eventos via `GameEvents` ao invés de `InputSelection` diretamente
+
+4. **Refatoração de RTSCameraController.cs:**
+   - Handlers de eventos de câmera implementados
+   - Integração completa com `GameEvents` (OnCameraShake, OnCameraFocus, etc.)
+
+5. **Screenshot de GameContext:**
+   - Inspector completo adicionado para referência visual
+
+#### **🔄 MODIFICADO:**
+
+1. **Estrutura da Documentação:**
+   - GameEvents agora é seção 2 (antes estava diluído na seção 3)
+   - "Core dos Cores" destacado na hierarquia
+
+2. **Exemplos de Código:**
+   - Todos os exemplos atualizados para usar `GameEvents`
+   - Padrões de Subscribe/Unsubscribe enfatizados
+
+#### **❌ REMOVIDO:**
+
+1. **Eventos Locais (Obsoletos):**
+   - `Unit.OnSelectionChanged` → Use `GameEvents.OnUnitSelectionChanged`
+   - `Unit.OnProgressChanged` → Use `GameEvents.OnUnitProgressChanged`
+   - `SelectionManager.OnSelectionChanged` → Use `GameEvents.OnSelectionChanged`
+
+---
+
+### 13.2 Guia de Migração (v2.0 → v3.0)
+
+#### **Para Código que Usava Eventos Locais:**
+
+**Antes (v2.0 - ❌ Obsoleto):**
 ```csharp
-// Sistema de Combate dispara shake
-void OnExplosion() {
-    GameEvents.RaiseCameraShake(amplitude: 2f, frequency: 3f, duration: 0.3f);
-}
-
-// UI de Mini-mapa dispara foco
-void OnMinimapClick(Vector2 worldXZ) {
-    GameEvents.RaiseMinimapPing(worldXZ);
+public class UnitListItemUI : MonoBehaviour {
+    Unit _unit;
+    
+    void Bind(Unit unit) {
+        if (_unit != null) {
+            _unit.OnProgressChanged -= OnProgressChanged; // ❌ Evento local
+        }
+        _unit = unit;
+        _unit.OnProgressChanged += OnProgressChanged; // ❌
+    }
 }
 ```
 
----
-
-### GameContext (MonoBehaviour)
-
-**Campos públicos:**
-- `GameConfig config`
-- `FactionDatabase factions`
-- `FactionService factionService`
-- `TimeManager timeManager`
-
-**Ciclo de vida:** `Awake()` chama `factionService.Init()` e injeta config no `timeManager`.
-
----
-
-### TimeManager (MonoBehaviour)
-
-**Config:**
-- `GameConfig config`
-- `float startTime01`
-
-**Propriedades públicas:**
-- `float Time01 { get; private set; }` — fração do dia 0..1
-- `int DayCount { get; private set; }`
-- `int Hour { get; private set; }`
-- `int Minute { get; private set; }`
-
-**Métodos:**
-- `Awake()` — inicializa Time01 e emite primeiro OnTimeOfDay01
-- `Update()` — avança tempo, computa HH:MM, dispara OnClockChanged, OnDayChanged quando vira o dia, e OnTimeOfDay01 a cada frame
-- `bool IsNight()` — confere se Time01 >= config.dayFraction
-
----
-
-### DayNightLightController (MonoBehaviour)
-
-**Campos:**
-- `Gradient colorOverDay`
-- `AnimationCurve intensityOverDay`
-
-**Inscrição:** `OnEnable()` subscreve `GameEvents.OnTimeOfDay01` e `OnDisable()` cancela.
-
----
-
-### FactionDefinition (ScriptableObject)
-
-**Campos:**
-- `FactionId id`
-- `string displayName`
-- `Color color`
-- `Sprite banner`
-- `float initialReputation` (0..100)
-
----
-
-### FactionDatabase (ScriptableObject)
-
-**Campos:**
-- `List<FactionDefinition> factions`
-
-**Métodos:**
-- `FactionDefinition Get(FactionId id)`
-
----
-
-### FactionService (MonoBehaviour)
-
-**Campos:**
-- `FactionDatabase database`
-
-**Métodos públicos:**
-- `void Init()` — constrói matriz de reputação A→B usando initialReputation
-- `float GetReputation(FactionId a, FactionId b)` — lê reputação A→B
-- `void SetReputation(FactionId a, FactionId b, float value)` — clamp 0..100, atualiza matriz e dispara ReputationChanged
-- `void DeltaReputation(FactionId a, FactionId b, float delta)` — aplica variação incremental
-
----
-
-### PlayerController (MonoBehaviour)
-
-**Campos:**
-- `FactionId myFaction`
-- `Camera mainCamera`
-
----
-
-## 4) EVENTOS — EMISSÃO & ASSINATURA
-
-**Disparados por:**
-- **TimeManager:** RaiseTimeOfDay, RaiseDayChanged, RaiseClockChanged
-- **FactionService:** RaiseReputationMatrixReady, RaiseReputationChanged
-- **Sistemas de economia (futuros):** RaiseResourceGathered
-- **Sistemas de gameplay:** eventos de câmera e seleção
-
-**Escutados por:**
-- **DayNightLightController:** OnTimeOfDay01
-- **UI de clock/mini-mapa/log:** OnClockChanged, OnDayChanged
-- **UI de diplomacia/IA:** OnReputation*
-- **Sistema de câmera:** eventos de câmera e seleção
-
-**Padrões recomendados:**
-- **Desacoplamento:** proibir dependência direta entre UI e lógica de tempo/diplomacia; trabalhar via GameEvents
-- **Unsubscribe:** garantir OnDisable()/OnDestroy() para evitar vazamento
-
----
-
-## 5) VARIÁVEIS-CHAVE / CONFIGURAÇÕES (DESTAQUES)
-
-- **GameConfig.secondsPerDay:** unidade de loop do ciclo diurno—impacta iluminação, spawn, AI schedules
-- **GameConfig.dayFraction:** limiar entre dia/noite para utilitários como TimeManager.IsNight()
-- **Penalidades globais** (nightVisionPenalty, mudSandMovePenalty, etc.): base para modificadores de visão/mobilidade/upkeep
-- **Economia baseline** (baseline*, workerCarryCapacity): referência para tuning de gathering/pathing e balance
-- **Reputação inicial** (FactionDefinition.initialReputation): seed da matriz A→B; ajustes mudam o "estado diplomático" inicial do mundo
-
----
-
-## 6) EXEMPLOS COMPOSTOS (END-TO-END)
-
-### 6.1 Iluminação diurna + UI de relógio
-
+**Depois (v3.0 - ✅ Atual):**
 ```csharp
-void OnEnable() {
-    GameEvents.OnTimeOfDay01 += t => dirLight.material.SetFloat("_Sun", t);
-    GameEvents.OnClockChanged += (d,h,m) => clockTxt.text = $"D{d} {h:00}:{m:00}";
+public class UnitListItemUI : MonoBehaviour {
+    Unit _unit;
+    
+    void OnEnable() {
+        GameEvents.OnUnitProgressChanged += OnProgressChanged; // ✅ GameEvents
+    }
+    
+    void OnDisable() {
+        GameEvents.OnUnitProgressChanged -= OnProgressChanged; // ✅
+    }
+    
+    void OnProgressChanged(Unit changedUnit) {
+        if (changedUnit == _unit) { // Filtrar
+            Refresh();
+        }
+    }
 }
-
-void OnDisable() {
-    GameEvents.OnTimeOfDay01 -= ...;
-    GameEvents.OnClockChanged -= ...;
-}
-```
-
-### 6.2 Diplomacia reativa pós-evento de jogo
-
-```csharp
-// Ex.: ao concluir missão de escolta para facção PvE
-factionService.DeltaReputation(player.myFaction, FactionId.PvE, +15f);
-// Observadores recebem OnReputationChanged(a,b,value)
 ```
 
 ---
 
-## 7) NOTAS DE IMPLEMENTAÇÃO & BOAS PRÁTICAS
+#### **Para Código que Usava SelectionManager Diretamente:**
 
-- **Ordem de inicialização:** manter `_GameContext` como ponto único; assegurar referências via Inspector
-- **ScriptableObjects:** preferir SO para dados estáticos (Config/Faction); favorece edição e serialização
-- **Eventos:** usar GameEvents como "Event Bus" do projeto; manter handlers curtos e resilientes
-- **Testabilidade:** onde possível, mover lógica pura (ex.: conversão Time01→HH:MM) para métodos estáticos/serviços testáveis
+**Antes (v2.0 - ❌ Obsoleto):**
+```csharp
+public class UnitListUI : MonoBehaviour {
+    [SerializeField] SelectionManager selectionManager; // ❌ Referência direta
+    
+    void OnEnable() {
+        selectionManager.OnSelectionChanged += UpdateList; // ❌ Evento local
+    }
+}
+```
+
+**Depois (v3.0 - ✅ Atual):**
+```csharp
+public class UnitListUI : MonoBehaviour {
+    // ✅ Sem referência ao SelectionManager
+    
+    void OnEnable() {
+        GameEvents.OnSelectionChanged += UpdateList; // ✅ GameEvents
+    }
+    
+    void OnDisable() {
+        GameEvents.OnSelectionChanged -= UpdateList; // ✅
+    }
+}
+```
+
+---
+
+### 13.3 Checklist de Migração
+
+Use esta checklist para atualizar seu código:
+
+- [ ] **Buscar eventos locais:** Procure por `.OnSelectionChanged`, `.OnProgressChanged` no projeto
+- [ ] **Substituir por GameEvents:** Troque por `GameEvents.OnXXX`
+- [ ] **Mover subscribe para OnEnable():** Se estava em `Start()`, mova para `OnEnable()`
+- [ ] **Adicionar unsubscribe em OnDisable():** CRÍTICO para evitar memory leaks
+- [ ] **Adicionar filtros em handlers:** Handlers de GameEvents recebem parâmetros, filtre o que é relevante
+- [ ] **Remover referências diretas:** Se tinha `[SerializeField] SelectionManager`, pode remover
+- [ ] **Testar:** Verifique que eventos ainda funcionam após migração
+
+---
+
+## 14) REFERÊNCIAS RÁPIDAS
+
+### 14.1 Eventos por Categoria (Resumo)
+
+| Categoria | Eventos | Raise Helpers |
+|-----------|---------|---------------|
+| **Tempo** | OnTimeOfDay01, OnDayChanged, OnClockChanged | RaiseTimeOfDay, RaiseDayChanged, RaiseClockChanged |
+| **Economia** | OnResourceGathered | RaiseResourceGathered |
+| **Diplomacia** | OnReputationMatrixReady, OnReputationChanged | RaiseReputationMatrixReady, RaiseReputationChanged |
+| **Câmera** | OnCameraShake, OnCameraFocus, OnCameraFocusXZ, OnCutsceneStart, OnCutsceneEnd | RaiseCameraShake, RaiseCameraFocus, RaiseCameraFocusXZ, RaiseCutsceneStart, RaiseCutsceneEnd |
+| **Unidades** | OnUnitSpawned, OnUnitDespawned, OnUnitSelectionChanged, OnUnitProgressChanged | RaiseUnitSpawned, RaiseUnitDespawned, RaiseUnitSelectionChanged, RaiseUnitProgressChanged |
+| **Seleção** | OnSelectionChanged, OnUnitClick, OnUnitDoubleClick, OnGroundClick, OnDragBegin, OnDragging, OnDragEnd | RaiseSelectionChanged, RaiseUnitClick, RaiseUnitDoubleClick, RaiseGroundClick, RaiseDragBegin, RaiseDragging, RaiseDragEnd |
+| **Minimap** | OnMinimapPing, OnSelectionFocus | RaiseMinimapPing, RaiseSelectionFocus |
+| **Input** | OnPointerDown, OnPointerUp | RaisePointerDown, RaisePointerUp |
+
+---
+
+### 14.2 Estrutura de Arquivos
+
+```
+Assets/
+├── Scripts/
+│   ├── Core/
+│   │   ├── Enums.cs
+│   │   ├── GameConfig.cs
+│   │   ├── GameEvents.cs ← "Core dos Cores"
+│   │   ├── GameContext.cs
+│   │   ├── TimeManager.cs
+│   │   ├── DayNightLightController.cs
+│   │   └── PlayerController.cs
+│   │
+│   └── Factions/
+│       ├── FactionDefinition.cs
+│       ├── FactionDatabase.cs
+│       └── FactionService.cs
+│
+└── Settings/
+    ├── GameConfig.asset
+    ├── FactionDatabase.asset
+    └── Factions/
+        ├── Faction_Player1.asset
+        ├── Faction_Player2.asset
+        └── Faction_PvE.asset
+```
+
+---
+
+### 14.3 Hierarquia de Cena Típica
+
+```
+SampleScene
+├── _GameContext
+│   ├── GameContext (Script)
+│   ├── TimeManager (Script)
+│   └── FactionService (Script)
+│
+├── Lights
+│   └── Directional Light
+│       └── DayNightLightController (Script)
+│
+├── Camera
+│   └── RTS Camera Rig
+│
+├── Player
+│   └── PlayerController (Script)
+│
+└── Units
+    ├── Worker (1)
+    └── Worker (2)
+```
+
+---
+
+## 15) CONCLUSÃO
+
+### 15.1 Resumo do Lote 1
+
+O **Lote 1 - Variáveis Globais & Módulo Factions** estabelece a **fundação arquitetural** do Medieval Thrones:
+
+✅ **GameEvents**: Event bus centralizado com 31+ eventos para comunicação desacoplada  
+✅ **Enums Globais**: Tipagem forte para Facções, Recursos, Danos, Terrenos, Unidades  
+✅ **GameConfig**: Configurações globais centralizadas em ScriptableObject  
+✅ **TimeManager**: Sistema de tempo com ciclo dia/noite e relógio HH:MM  
+✅ **Módulo Factions**: Definições, banco de dados e matriz de reputação em runtime  
+✅ **GameContext**: Orquestrador central que inicializa tudo na ordem correta  
+
+### 15.2 Qualidade da Arquitetura
+
+**Pontos Fortes:**
+- ✅ Desacoplamento total via GameEvents
+- ✅ Testabilidade (lógica isolada, eventos mockáveis)
+- ✅ Escalabilidade (adicionar listeners não requer modificar emissores)
+- ✅ Manutenibilidade (ponto único de documentação de eventos)
+
+**Padrões de Excelência:**
+- ✅ ScriptableObjects para configurações
+- ✅ Event-driven architecture
+- ✅ Separation of concerns
+- ✅ Dependency injection via GameContext
+
+### 15.3 Próximos Passos
+
+**Lotes Subsequentes:**
+- **Lote 2 - Câmera RTS**: Documentação atualizada (próxima iteração)
+- **Lote 3 - Unit**: Documentação atualizada (próxima iteração)
+- **Lote 4 - Selection**: Documentação atualizada (próxima iteração)
+
+**Novos Módulos (Futuro):**
+- Sistema de Comandos (Move, Attack)
+- Sistema de Combate (Dano, Morte, XP)
+- Sistema de Construção (Placement, Custos)
+- Sistema de IA (Pathfinding, Comportamento)
 
 ---
 
@@ -5807,7 +7484,6 @@ Use esta checklist para verificar se o módulo está configurado corretamente:
 
 **Documento mantido por:** Equipe de Desenvolvimento  
 **Última atualização:** Outubro 2025  
-**Versão do Documento:** 2.0
-
+**Versão do Documento:** 3.0 (Refatoração Completa)
 
 ---
