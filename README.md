@@ -11338,3 +11338,3122 @@ O **Lote 4 - Selection System** estabelece o **sistema completo de seleção de 
 **Compatibilidade:** Unity 2022.3+, New Input System 1.7+, Medieval Thrones v3.0+
 
 ---
+
+## LOTE 5 — PARTE 1: LEFT BAR (Lista de Unidades e Grupos)
+
+**Versão:** 1.0 (Inicial - Outubro 2025)  
+**Status:** ✅ Documentado (Aguardando Refatoração)  
+**Módulo:** LEFT BAR - Lista de Unidades e Grupos
+
+### Objetivo
+
+Oferecer uma referência técnica clara, rastreável e reutilizável do módulo de **LEFT BAR**, que gerencia a lista visual de unidades e grupos na interface do usuário, incluindo: exibição de unidades, reordenação via drag-and-drop, criação/gerenciamento de grupos, seleção visual, context menus e integração com os sistemas de Unit (Lote 3) e Selection (Lote 4).
+
+---
+
+## 1) VISÃO GERAL DO MÓDULO
+
+### 1.1 Responsabilidades Principais
+
+O **LEFT BAR** é responsável por:
+
+1. **Exibição Visual**: Lista rolável de unidades do jogador com informações (nome, nível, XP, ícone).
+2. **Reordenação**: Sistema de drag-and-drop para reorganizar itens manualmente.
+3. **Grupos**: Criação, exibição e gerenciamento de grupos de unidades (containers expansíveis).
+4. **Seleção Visual**: Highlight de itens selecionados sincronizado com `SelectionManager`.
+5. **Context Menus**: Menus de clique-direito para ações específicas (Follow, Rename, Delete).
+6. **Integração**: Comunicação bidirecional com `SelectionManager` via `GameEvents`.
+
+### 1.2 Arquitetura do Sistema
+
+```
+┌─────────────────────────────────────────────┐
+│         UnitListPanel (Controller)          │
+│  ┌──────────────────────────────────────┐   │
+│  │ _order: List<ListItemWrapper>        │   │
+│  │  ├─ ListItemWrapper(Unit)            │   │
+│  │  ├─ ListItemWrapper(UnitGroup)       │   │
+│  │  └─ ListItemWrapper(Unit)            │   │
+│  └──────────────────────────────────────┘   │
+│              │                               │
+│              ▼                               │
+│  ┌──────────────────────────────────────┐   │
+│  │ Visual Hierarchy (Transform)         │   │
+│  │  ├─ UnitListItemUI (prefab instance) │   │
+│  │  ├─ GroupListItemUI (prefab instance)│   │
+│  │  │   └─ subContent                    │   │
+│  │  │       ├─ UnitListItemUI (nested)  │   │
+│  │  │       └─ UnitListItemUI (nested)  │   │
+│  │  └─ UnitListItemUI (prefab instance) │   │
+│  └──────────────────────────────────────┘   │
+└─────────────────────────────────────────────┘
+         │                      │
+         ▼                      ▼
+  ┌────────────┐         ┌──────────────┐
+  │ Unit       │         │ SelectionMgr │
+  │ (Lote 3)   │         │ (Lote 4)     │
+  └────────────┘         └──────────────┘
+         │                      │
+         └──────► GameEvents ◄──┘
+```
+
+**Fluxo de Vida de um Item:**
+1. `UnitListPanel.InitializeOrderFromRegistry()` popula `_order` com unidades da facção
+2. `Build()` cria instâncias visuais dos prefabs e vincula dados
+3. `ReorderableListItem` permite drag-and-drop para reorganizar
+4. `UnitListItemHandle` detecta cliques e chama `OnItemClicked`
+5. `UnitListPanel` atualiza `SelectionManager`
+6. `GameEvents.OnSelectionChanged` notifica todos os listeners
+7. `RefreshFromSelection()` atualiza highlight visual na lista
+
+### 1.3 Integração com Outros Módulos
+
+- **Lote 1 (GameEvents)**: Surface de eventos para comunicação desacoplada
+- **Lote 2 (Camera)**: Context menu "Follow" usa `RTSCameraCinemachineV3Controller.GoTo()`
+- **Lote 3 (Unit)**: 
+  - Consome `Unit.DisplayName`, `Unit.Level`, `Unit.Xp01`, `Unit.def`
+  - Escuta `GameEvents.OnUnitProgressChanged` para atualizar barras de XP
+- **Lote 4 (Selection)**:
+  - Dispara `SelectionManager.SelectExactly()`, `AddToSelection()`, `ToggleSet()`
+  - Escuta `GameEvents.OnSelectionChanged` para atualizar highlight visual
+
+### 1.4 Padrão de Eventos (Atual)
+
+**Eventos Consumidos:**
+- ✅ `GameEvents.OnSelectionChanged` - Atualiza highlight visual
+- ✅ `GameEvents.OnUnitProgressChanged` - Atualiza barras de XP/Level
+
+**Eventos Disparados:**
+- ⚠️ **Nenhum** (SelectionManager dispara em nome do UnitListPanel)
+
+**Problemas Identificados:**
+- ❌ Não há eventos de grupos (`OnGroupCreated`, `OnGroupDeleted`, `OnGroupRenamed`)
+- ❌ Não há sincronização com `OnUnitSpawned` / `OnUnitDespawned`
+- ⚠️ Seção 10 (Refatoração) aborda estas lacunas
+
+---
+
+## 2) ESTRUTURA DAS CLASSES E RELACIONAMENTOS
+
+### 2.1 IListItemModel.cs
+
+**Tipo:** `interface`
+
+**Responsabilidade:** Interface comum para unificar `Unit` e `UnitGroup` na lista canônica do painel.
+
+**Definição Completa:**
+
+```csharp
+public interface IListItemModel
+{
+    string DisplayName { get; }
+    bool IsGroup { get; }
+    Unit GetUnit();                     // Retorna Unit ou null
+    IReadOnlyList<Unit> GetUnitsInItem(); // Lista de units (1 se unit, N se group)
+}
+```
+
+**Implementações:**
+- `ListItemWrapper.UnitWrapper` (wrapper interno para Unit)
+- `UnitGroup` (grupo de unidades)
+
+**Relacionamentos:**
+- Consumido por: `ListItemWrapper`, `UnitListPanel`
+- Implementado por: `UnitWrapper` (privada), `UnitGroup`
+
+---
+
+### 2.2 ListItemWrapper.cs + ListItemMarker.cs
+
+**ListItemWrapper (Adapter Pattern):**
+
+**Responsabilidade:** Unifica `Unit` e `UnitGroup` para armazenamento na lista canônica `_order` do painel.
+
+```csharp
+public class ListItemWrapper : IListItemModel
+{
+    public IListItemModel Model { get; }
+
+    // Construtor para Unit
+    public ListItemWrapper(Unit unit) {
+        Model = new UnitWrapper(unit);
+    }
+
+    // Construtor para UnitGroup
+    public ListItemWrapper(UnitGroup group) {
+        Model = group;
+    }
+
+    // Pass-through da interface
+    public string DisplayName => Model.DisplayName;
+    public bool IsGroup => Model.IsGroup;
+    public Unit GetUnit() => Model.GetUnit();
+    public IReadOnlyList<Unit> GetUnitsInItem() => Model.GetUnitsInItem();
+
+    // Wrapper interno para Unit
+    private class UnitWrapper : IListItemModel {
+        private readonly Unit _unit;
+        public UnitWrapper(Unit unit) => _unit = unit;
+        public string DisplayName => _unit.DisplayName;
+        public bool IsGroup => false;
+        public Unit GetUnit() => _unit;
+        public IReadOnlyList<Unit> GetUnitsInItem() => new List<Unit> { _unit };
+    }
+}
+```
+
+**ListItemMarker (Back-Reference):**
+
+**Responsabilidade:** Marcador anexado aos GameObjects visuais que aponta de volta para o `ListItemWrapper` lógico, permitindo reordenação sem heurísticas.
+
+```csharp
+public class ListItemMarker : MonoBehaviour
+{
+    public ListItemWrapper Wrapper; // Setado em Build()
+}
+```
+
+**Padrão de Uso:**
+```csharp
+// No UnitListPanel.Build():
+var visualGO = Instantiate(prefab, content);
+var marker = visualGO.AddComponent<ListItemMarker>();
+marker.Wrapper = wrapper; // Liga visual → lógica
+```
+
+**Relacionamentos:**
+- `ListItemWrapper`: Contém `IListItemModel`
+- `ListItemMarker`: Anexado a cada GameObject visual
+- Sincronização: `ReorderableListItem` usa marker para atualizar `_order`
+
+---
+
+### 2.3 UnitListPanel.cs
+
+**Tipo:** `MonoBehaviour` (Controller MVC)
+
+**Atributos:**
+- `[RequireComponent(typeof(ScrollRect))]`
+
+**Responsabilidade:** 
+Controlador principal do LEFT BAR. Gerencia:
+- Lista canônica `_order` (dados lógicos)
+- Criação/destruição de itens visuais
+- Seleção de units (delegando para `SelectionManager`)
+- Reordenação via drag-and-drop
+- Criação/deleção de grupos
+
+**Campos Públicos (Inspector):**
+
+```csharp
+[Header("Prefabs")]
+public UnitListItemUI unitPrefab;
+public GroupListItemUI groupPrefab;
+
+[Header("Refs da Cena")]
+public RectTransform content;          // ScrollRect.content
+public SelectionManager selection;     // Gerenciador de seleção
+public InputSelection inputSelection;  // Input (Ctrl/Shift)
+public PlayerController player;        // Para filtrar por facção
+
+[Header("Drag Root")]
+[Tooltip("RectTransform fora da ScrollView para drag visual")]
+public RectTransform dragRoot;
+public Canvas canvasUI;
+
+[Header("Configurações de Drag")]
+public float dragAlpha = 0.6f;
+
+[Header("Configurações de Resize de Grupos")]
+public Texture2D resizeCursorTexture;
+```
+
+**Propriedades Públicas:**
+
+```csharp
+public RectTransform Content => content;
+public SelectionManager SelectionManager => selection;
+public InputSelection InputSelection => inputSelection;
+public RectTransform DragRoot => dragRoot;
+public Canvas Canvas => canvasUI;
+```
+
+**Estruturas Internas:**
+
+```csharp
+// Lista canônica de itens (lógica)
+readonly List<ListItemWrapper> _order = new();
+
+// Âncora para seleção range (Shift)
+int? _anchorIndex = null;
+```
+
+**Métodos Públicos - Inicialização:**
+
+```csharp
+/// <summary>
+/// Popula _order com unidades da facção do jogador.
+/// Chamado em OnEnable.
+/// </summary>
+void InitializeOrderFromRegistry()
+
+/// <summary>
+/// Reconstrói toda a lista visual a partir de _order.
+/// Destrói itens antigos e instancia novos.
+/// </summary>
+public void Build()
+
+/// <summary>
+/// Destrói todos os filhos visuais de content.
+/// </summary>
+void ClearChildren()
+```
+
+**Métodos Públicos - Seleção:**
+
+```csharp
+/// <summary>
+/// Chamado por UnitListItemHandle ao clicar em um item.
+/// </summary>
+/// <param name="unit">Unit clicada</param>
+/// <param name="ctrl">Ctrl pressionado?</param>
+/// <param name="shift">Shift pressionado?</param>
+/// <param name="isDouble">Double-click?</param>
+public void OnItemClicked(Unit unit, bool ctrl, bool shift, bool isDouble)
+
+/// <summary>
+/// Seleciona apenas esta unit (atalho para context menu).
+/// </summary>
+public void SelectOnlyUnit(Unit unit)
+
+/// <summary>
+/// Atualiza highlight visual baseado na seleção atual.
+/// </summary>
+/// <param name="selectedUnits">Lista de units selecionadas</param>
+public void RefreshFromSelection(IEnumerable<Unit> selectedUnits)
+```
+
+**Métodos Públicos - Grupos:**
+
+```csharp
+/// <summary>
+/// Cria novo grupo vazio e o adiciona à lista.
+/// </summary>
+/// <param name="groupName">Nome do grupo</param>
+public void CreateNewGroup(string groupName)
+
+/// <summary>
+/// Deleta grupo e move suas units para a raiz.
+/// </summary>
+/// <param name="group">Grupo a deletar</param>
+/// <param name="unitsToRestore">Units do grupo</param>
+public void DeleteGroupAndRestoreUnits(UnitGroup group, List<Unit> unitsToRestore)
+
+/// <summary>
+/// Reconstrói apenas o conteúdo visual de um grupo.
+/// </summary>
+/// <param name="group">Grupo alvo</param>
+/// <param name="subContent">RectTransform do subContent</param>
+public void BuildGroupContent(UnitGroup group, RectTransform subContent)
+
+/// <summary>
+/// Define âncora de seleção para um grupo.
+/// </summary>
+public void CommitSelectionForGroup(UnitGroup group)
+```
+
+**Métodos Públicos - Drag-and-Drop:**
+
+```csharp
+/// <summary>
+/// Finaliza operação de drag-and-drop.
+/// Atualiza _order baseado na ordem visual (sibling index).
+/// </summary>
+/// <param name="draggedWrapper">Item arrastado</param>
+/// <param name="dropZone">GroupDropZone de destino (ou null)</param>
+public void CommitDragOperation(ListItemWrapper draggedWrapper, GroupDropZone dropZone)
+```
+
+**Ciclo de Vida:**
+
+```csharp
+void Reset() {
+    // Auto-discovery de referências
+}
+
+void OnEnable() {
+    InitializeOrderFromRegistry();
+    Build();
+    GameEvents.OnSelectionChanged += RefreshFromSelection;
+}
+
+void OnDisable() {
+    GameEvents.OnSelectionChanged -= RefreshFromSelection;
+}
+```
+
+**Relacionamentos:**
+- Consome: `UnitRegistry`, `SelectionManager`, `InputSelection`, `PlayerController`
+- Gerencia: `ListItemWrapper`, `UnitListItemUI`, `GroupListItemUI`
+- Escuta: `GameEvents.OnSelectionChanged`
+
+---
+
+### 2.4 ReorderableListItem.cs
+
+**Tipo:** `MonoBehaviour`
+
+**Interfaces:** `IBeginDragHandler`, `IDragHandler`, `IEndDragHandler`
+
+**Responsabilidade:** 
+Sistema de drag-and-drop para reordenação de itens na lista. Cria um "ghost" visual durante o drag e atualiza a ordem lógica no `OnEndDrag`.
+
+**Campos Públicos (Inspector):**
+
+```csharp
+[Header("Configuração de Drag")]
+[Tooltip("Quantos pixels para começar drag")]
+public float dragStartThreshold = 5f;
+```
+
+**Estruturas Internas:**
+
+```csharp
+// Injetado pelo UnitListPanel no Build()
+UnitListPanel _panel;
+RectTransform _dragRoot;
+Canvas _canvas;
+UnitListItemHandle _handle;
+
+// Estado de drag
+bool _isDragging = false;
+Vector2 _startPos;
+RectTransform _ghostRT;
+RectTransform _placeholderRT;
+CanvasGroup _originalCanvasGroup;
+```
+
+**Métodos Públicos:**
+
+```csharp
+/// <summary>
+/// Injeta dependências. Chamado por UnitListPanel.Build().
+/// </summary>
+public void Setup(UnitListPanel panel, RectTransform dragRoot, 
+                  Canvas canvas, UnitListItemHandle handle)
+```
+
+**Implementação de Interfaces:**
+
+```csharp
+public void OnBeginDrag(PointerEventData eventData) {
+    // 1. Verifica threshold de movimento
+    // 2. Cria ghost visual (cópia do item)
+    // 3. Cria placeholder transparente (mantém posição)
+    // 4. Reduz alpha do item original
+}
+
+public void OnDrag(PointerEventData eventData) {
+    // 1. Move ghost seguindo o mouse
+    // 2. Detecta inserção (onde o ghost está)
+    // 3. Reordena placeholder via SetSiblingIndex
+}
+
+public void OnEndDrag(PointerEventData eventData) {
+    // 1. Detecta GroupDropZone (drop em grupo?)
+    // 2. Restaura visuais (destroi ghost/placeholder)
+    // 3. Chama panel.CommitDragOperation()
+    // 4. Suprime próximo clique (via handle.IgnoreNextClickOnce())
+}
+```
+
+**Algoritmo de Inserção (OnDrag):**
+
+```csharp
+// Pseudo-código simplificado:
+int insertIndex = CalculateInsertionIndex(ghostWorldY, content);
+// insertIndex considera:
+// - Posição Y do ghost no espaço mundial
+// - Posição Y dos outros itens
+// - Insere ANTES do primeiro item com Y menor que ghost
+
+if (insertIndex != _placeholderRT.GetSiblingIndex()) {
+    _placeholderRT.SetSiblingIndex(insertIndex);
+    LayoutRebuilder.ForceRebuildLayoutImmediate(content);
+}
+```
+
+**Relacionamentos:**
+- Anexado a: Cada `UnitListItemUI` e `GroupListItemUI`
+- Consome: `UnitListPanel`, `UnitListItemHandle`, `GroupDropZone`
+- Dispara (indiretamente): Atualização de `_order` via `CommitDragOperation`
+
+---
+
+### 2.5 UnitListItemUI.cs + UnitListItemHandle.cs
+
+**UnitListItemUI (View MVC):**
+
+**Responsabilidade:** Visual de um item de unidade na lista (nome, ícone, nível, barra de XP, outline de seleção).
+
+**Campos Públicos (Inspector):**
+
+```csharp
+[Header("Refs (arraste do prefab)")]
+public Image portrait;          // Ícone da unit
+public TMP_Text nameText;       // Nome
+public TMP_Text levelText;      // Nível
+
+[Header("Progress Bar (XP)")]
+[Tooltip("Parte reta (90%). Image.type = Filled/Horizontal")]
+public Image barFill;
+
+[Tooltip("Círculo (10%). Image.type = Filled/Radial360")]
+public Image circleFill;
+
+[Header("Selection Visual")]
+public Outline outline;         // Borda de seleção
+```
+
+**Propriedades:**
+
+```csharp
+public Unit Unit => _unit; // Unit vinculada (read-only)
+```
+
+**Métodos Públicos:**
+
+```csharp
+/// <summary>
+/// Vincula uma Unit ao item visual.
+/// Inscreve em GameEvents.OnUnitProgressChanged.
+/// </summary>
+public void Bind(Unit unit)
+
+/// <summary>
+/// Desvincula Unit e remove listener de eventos.
+/// </summary>
+public void Unbind()
+
+/// <summary>
+/// Atualiza visual (nome, nível, XP).
+/// </summary>
+public void RefreshNow()
+
+/// <summary>
+/// Ativa/desativa outline de seleção.
+/// </summary>
+public void SetSelected(bool selected)
+```
+
+**Implementação de Barra de XP:**
+
+```csharp
+void SetXp01(float t) {
+    t = Mathf.Clamp01(t);
+    
+    // 90% da barra é reta (horizontal)
+    float straightPart = Mathf.Min(t, 0.9f) / 0.9f;
+    if (barFill) barFill.fillAmount = straightPart;
+    
+    // 10% final é círculo (radial)
+    float circlePart = (t <= 0.9f) ? 0f : (t - 0.9f) / 0.1f;
+    if (circleFill) circleFill.fillAmount = circlePart;
+}
+```
+
+**Handler de Evento (Refatorado):**
+
+```csharp
+void OnUnitProgressChanged(Unit changedUnit) {
+    // REFATORAÇÃO: Filtrar apenas a unit vinculada
+    if (changedUnit == _unit) {
+        Refresh();
+    }
+}
+```
+
+---
+
+**UnitListItemHandle (Input Handler):**
+
+**Responsabilidade:** Detecta cliques (simples, Ctrl, Shift, duplo, direito) em itens da lista e delega para `UnitListPanel.OnItemClicked()`.
+
+**Interfaces:** `IPointerClickHandler`
+
+**Campos Privados:**
+
+```csharp
+UnitListPanel _panel;
+InputSelection _input;
+SelectionManager _selection;
+int _index;              // Índice visual (sibling index)
+Unit _unit;              // Unit vinculada
+UnitListItemContextMenu _contextMenu;
+
+[SerializeField] float doubleClickMaxDelay = 0.30f;
+float _lastClickTime = -10f;
+
+// Supressão de clique após drag
+int _suppressClickFrame = -1;
+```
+
+**Métodos Públicos:**
+
+```csharp
+/// <summary>
+/// Injeta dependências. Chamado por UnitListPanel.Build().
+/// </summary>
+public void Setup(UnitListPanel panel, InputSelection input, 
+                  SelectionManager selection, int index, Unit unit)
+
+/// <summary>
+/// Suprime o próximo clique (chamado por ReorderableListItem após drag).
+/// </summary>
+public void IgnoreNextClickOnce()
+```
+
+**Implementação de OnPointerClick:**
+
+```csharp
+public void OnPointerClick(PointerEventData eventData) {
+    if (_unit == null) return;
+    
+    // Context menu (clique direito)
+    if (eventData.button == PointerEventData.InputButton.Right) {
+        _contextMenu.ShowMenuAt(eventData.position, eventData.pressEventCamera);
+        return;
+    }
+    
+    // Supressão pós-drag
+    if (Time.frameCount == _suppressClickFrame) {
+        _suppressClickFrame = -1;
+        return;
+    }
+    
+    bool ctrl = _input != null && _input.IsCtrlPressed;
+    bool shift = _input != null && _input.IsShiftPressed;
+    bool isDouble = (Time.unscaledTime - _lastClickTime) <= doubleClickMaxDelay;
+    _lastClickTime = Time.unscaledTime;
+    
+    // Delega para painel
+    _panel.OnItemClicked(_unit, ctrl, shift, isDouble);
+}
+```
+
+**Relacionamentos:**
+- Anexado a: Cada `UnitListItemUI`
+- Consome: `UnitListPanel`, `InputSelection`, `UnitListItemContextMenu`
+
+---
+
+### 2.6 UnitGroup.cs
+
+**Tipo:** `class` (Modelo de dados)
+
+**Responsabilidade:** Armazena dados de um grupo de unidades (nome, lista de units, estado de expansão, altura preferida).
+
+**Implementa:** `IListItemModel`
+
+**Campos Públicos:**
+
+```csharp
+public string GroupName { get; set; } = "Novo Grupo";
+public List<Unit> Units { get; set; } = new List<Unit>();
+public string ID { get; private set; } = System.Guid.NewGuid().ToString();
+public bool IsExpanded { get; set; } = true;
+public float PreferredHeight { get; set; } = -1f; // LayoutElement.preferredHeight
+```
+
+**Implementação de IListItemModel:**
+
+```csharp
+public string DisplayName => GroupName;
+public bool IsGroup => true;
+public Unit GetUnit() => null;
+public IReadOnlyList<Unit> GetUnitsInItem() => Units;
+```
+
+**Relacionamentos:**
+- Consumido por: `ListItemWrapper`, `GroupListItemUI`, `UnitListPanel`
+- Contém: `List<Unit>` (referências a units do Lote 3)
+
+---
+
+### 2.7 GroupListItemUI.cs + GroupDropZone.cs
+
+**GroupListItemUI (View de Grupo):**
+
+**Responsabilidade:** Visual de um grupo na lista (header expansível, subContent com units aninhadas, resize grip, outline de seleção).
+
+**Campos Públicos (Inspector):**
+
+```csharp
+[Header("Refs Visuais")]
+public TMP_Text nameText;           // Nome do grupo
+public Toggle expandToggle;         // Toggle de expansão
+public Outline outline;             // Borda de seleção (root)
+public Outline headerOutline;       // Borda de seleção (header)
+
+[Header("Content Aninhado")]
+[Tooltip("RectTransform que contém os UnitListItemUI filhos")]
+public RectTransform subContent;
+
+[Header("Layout")]
+[SerializeField] LayoutElement rootLayout;
+[SerializeField] RectTransform headerRect;
+public ScrollRect innerScrollRect;  // Scroll interno do grupo
+```
+
+**Propriedades:**
+
+```csharp
+public UnitGroup GroupModel => _groupModel;
+public IReadOnlyList<Unit> Units => _groupModel?.Units;
+```
+
+**Métodos Públicos:**
+
+```csharp
+/// <summary>
+/// Vincula UnitGroup ao visual.
+/// </summary>
+public void Bind(UnitGroup group)
+
+/// <summary>
+/// Desvincula grupo.
+/// </summary>
+public void Unbind()
+
+/// <summary>
+/// Atualiza visuais de expansão/colapso e altura.
+/// </summary>
+public void RefreshVisuals()
+
+/// <summary>
+/// Atualiza apenas visuais de filhos (sem tocar em altura).
+/// Usado após reordenar/adicionar/remover itens.
+/// </summary>
+public void RefreshChildrenOnly()
+
+/// <summary>
+/// Ativa/desativa outline de seleção.
+/// </summary>
+public void SetSelected(bool selected)
+```
+
+**Lógica de Expansão/Colapso:**
+
+```csharp
+void OnToggleValueChanged(bool isExpanded) {
+    _groupModel.IsExpanded = isExpanded;
+    RefreshVisuals();
+    
+    if (isExpanded) {
+        panel.BuildGroupContent(_groupModel, subContent);
+        panel.RefreshFromSelection(panel.SelectionManager.Selection);
+    }
+    
+    LayoutRebuilder.ForceRebuildLayoutImmediate(parentRt);
+}
+
+// RefreshVisuals():
+if (isExpanded) {
+    rootLayout.minHeight = 0f;
+    rootLayout.preferredHeight = _groupModel.PreferredHeight;
+    subContent.gameObject.SetActive(true);
+    _resizeGripHandler.enabled = true;
+} else {
+    rootLayout.preferredHeight = _collapsedHeight;
+    rootLayout.minHeight = _collapsedHeight;
+    subContent.gameObject.SetActive(false);
+    _resizeGripHandler.enabled = false;
+}
+```
+
+---
+
+**GroupDropZone (Drop Handler):**
+
+**Responsabilidade:** Detecta drop de units sobre o grupo e processa cliques no header do grupo para seleção.
+
+**Interfaces:** `IDropHandler` (IPointerClickHandler comentado)
+
+**Campos Privados:**
+
+```csharp
+[SerializeField] GroupListItemUI groupUI;
+[SerializeField] UnitListPanel panel;
+[SerializeField] float doubleClickMaxDelay = 0.30f;
+float _lastClickTime = -10f;
+
+const int SUPPRESS_DRAG_FRAME = 2;
+public int LastDropFrame = -100000; // Para supressão de clique pós-drop
+```
+
+**Métodos Públicos:**
+
+```csharp
+/// <summary>
+/// Injeta dependências.
+/// </summary>
+public void Setup(UnitListPanel p)
+
+/// <summary>
+/// Injeta GroupListItemUI.
+/// </summary>
+public void SetGroupUI(GroupListItemUI ui)
+```
+
+**Implementação de OnDrop:**
+
+```csharp
+public void OnDrop(PointerEventData eventData) {
+    var draggedItem = eventData.pointerDrag;
+    if (draggedItem == null) return;
+    
+    var rei = draggedItem.GetComponent<ReorderableListItem>();
+    if (rei != null) {
+        LastDropFrame = Time.frameCount;
+        // Commit será tratado por OnEndDrag do ReorderableListItem
+        return;
+    }
+}
+```
+
+**Lógica de Clique (comentada no código atual):**
+
+```csharp
+// OnPointerClick processa:
+// - Clique simples: SelectExactly(unitsInGroup)
+// - Ctrl: ToggleSet(unitsInGroup)
+// - Shift: Range selection
+// - Double: SelectExactly(mesmoTipo)
+```
+
+**Relacionamentos:**
+- Anexado a: Cada `GroupListItemUI`
+- Consome: `UnitListPanel`, `GroupListItemUI`
+- Interage com: `ReorderableListItem` (detecta drop)
+
+---
+
+### 2.8 ResizeGripHandler.cs
+
+**Tipo:** `MonoBehaviour`
+
+**Interfaces:** `IPointerDownHandler`, `IDragHandler`, `IPointerUpHandler`, `IPointerEnterHandler`, `IPointerExitHandler`
+
+**Responsabilidade:** 
+Permite redimensionar grupos arrastando uma "grip" na parte inferior. Inclui auto-scroll quando o cursor aproxima da borda inferior do viewport.
+
+**Campos Públicos (Inspector):**
+
+```csharp
+[Header("Target (Group)")]
+[SerializeField] LayoutElement targetLayoutElement;
+[SerializeField] RectTransform targetRect;
+
+[Header("Main List Scroll Refs")]
+[SerializeField] ScrollRect mainScrollRect;
+[SerializeField] RectTransform mainViewport;
+
+[Header("Cursor Settings")]
+[SerializeField] Texture2D resizeCursorTexture;
+[SerializeField] Vector2 hotSpot = new Vector2(16, 16);
+
+[Header("Auto-Scroll Tuning")]
+[SerializeField] float edgeHotZonePx = 80f;
+[SerializeField] float maxScrollSpeedPxPerSec = 900f;
+
+[Header("Constraints")]
+[SerializeField] float minHeight = 200f;
+[SerializeField] float maxHeight = 1000f;
+```
+
+**Métodos Públicos:**
+
+```csharp
+/// <summary>
+/// Injeta dependências. Chamado por UnitListPanel ou GroupListItemUI.
+/// </summary>
+public void Setup(ScrollRect mainScroll, RectTransform mainVp, Texture2D cursorTexture)
+```
+
+**Implementação de Drag:**
+
+```csharp
+public void OnPointerDown(PointerEventData eventData) {
+    _isDragging = true;
+    _dragStartMousePos = eventData.position;
+    _dragStartPreferredHeight = targetLayoutElement.preferredHeight;
+    // Ativa outline visual
+}
+
+public void OnDrag(PointerEventData eventData) {
+    float deltaY = eventData.position.y - _dragStartMousePos.y;
+    float newHeight = _dragStartPreferredHeight - deltaY;
+    newHeight = Mathf.Clamp(newHeight, minHeight, maxHeight);
+    
+    targetLayoutElement.preferredHeight = newHeight;
+    LayoutRebuilder.ForceRebuildLayoutImmediate(targetRect);
+    
+    DoAutoScroll(eventData.position);
+}
+
+public void OnPointerUp(PointerEventData eventData) {
+    _isDragging = false;
+    Cursor.SetCursor(null, Vector2.zero, CursorMode.Auto);
+    
+    // Persistir altura via PlayerPrefs
+    string key = "GroupHeight_" + groupUI.GroupModel.ID;
+    PlayerPrefs.SetFloat(key, targetLayoutElement.preferredHeight);
+    PlayerPrefs.Save();
+}
+```
+
+**Auto-Scroll (DoAutoScroll):**
+
+```csharp
+void DoAutoScroll(Vector2 screenPos) {
+    float viewportBottomScreenY = ...;
+    float viewportTopScreenY = ...;
+    
+    // Scroll para baixo (mouse na zona quente inferior)
+    float downAmount = Mathf.Clamp01(
+        ((viewportBottomScreenY + edgeHotZonePx) - screenPos.y) / edgeHotZonePx
+    );
+    
+    // Scroll para cima (bloqueado por design)
+    float upAmount = Mathf.Clamp01(
+        (screenPos.y - (viewportTopScreenY - edgeHotZonePx)) / edgeHotZonePx
+    );
+    
+    if (downAmount > 0f) {
+        float dir = -1f;
+        float speedPx = downAmount * maxScrollSpeedPxPerSec;
+        float deltaNorm = (speedPx * Time.unscaledDeltaTime) / scrollable;
+        mainScrollRect.verticalNormalizedPosition += dir * deltaNorm;
+    } else if (upAmount > 0f) {
+        return; // Bloqueado
+    }
+}
+```
+
+**Relacionamentos:**
+- Anexado a: Grip visual de cada `GroupListItemUI`
+- Consome: `ScrollRect` (lista principal), `LayoutElement` (grupo)
+- Persiste: Altura via `PlayerPrefs`
+
+---
+
+### 2.9 CreateGroupUI.cs
+
+**Tipo:** `MonoBehaviour`
+
+**Responsabilidade:** UI dedicada para criação de grupos (InputField + Botão).
+
+**Campos Públicos (Inspector):**
+
+```csharp
+[Header("Scene Refs")]
+[SerializeField] UnitListPanel rootPanel;
+[SerializeField] SelectionManager selection;
+[SerializeField] InputSelection inputSel;
+[SerializeField] RectTransform dragRoot;
+[SerializeField] Canvas canvasUI;
+
+[Header("UI")]
+[SerializeField] TMP_InputField nameInput;
+[SerializeField] Button createButton;
+
+[Header("Prefab")]
+[SerializeField] GroupListItemUI groupPrefab;
+```
+
+**Método Principal:**
+
+```csharp
+public void CreateGroup() {
+    if (rootPanel == null || groupPrefab == null) return;
+    
+    var desiredName = string.IsNullOrWhiteSpace(nameInput?.text) 
+        ? "Novo Grupo" 
+        : nameInput.text.Trim();
+    
+    rootPanel.CreateNewGroup(desiredName);
+    
+    if (nameInput) nameInput.text = string.Empty;
+}
+```
+
+**Relacionamentos:**
+- Consome: `UnitListPanel`
+- Dispara: `CreateNewGroup()` (cria grupo vazio)
+
+---
+
+### 2.10 Context Menus
+
+**Arquitetura de Context Menus:**
+
+```
+┌─────────────────────────────────────────┐
+│   UnitListItemContextMenu               │
+│   ├─ Cria blocker (BlockerInputCatcher) │
+│   ├─ Instancia menu (contextMenuPrefab) │
+│   └─ Setup UnitContextMenuHandler       │
+│         └─ Action: Follow (câmera)      │
+└─────────────────────────────────────────┘
+
+┌─────────────────────────────────────────┐
+│   GroupHeaderContextMenu                │
+│   ├─ Cria blocker (BlockerInputCatcher) │
+│   ├─ Instancia menu (contextMenuPrefab) │
+│   └─ Setup GroupContextMenuHandler      │
+│         ├─ Action: Rename               │
+│         └─ Action: Delete               │
+└─────────────────────────────────────────┘
+```
+
+**Classes Comuns:**
+
+**ViewportClearSelection.cs:**
+```csharp
+/// <summary>
+/// Limpa seleção ao clicar no vazio do Viewport.
+/// </summary>
+public class ViewportClearSelection : MonoBehaviour, IPointerDownHandler {
+    [SerializeField] UnitListPanel panel;
+    
+    public void OnPointerDown(PointerEventData eventData) {
+        // Se acertou um item, não limpa
+        var go = eventData.pointerPressRaycast.gameObject;
+        if (go && go.GetComponentInParent<UnitListItemUI>()) return;
+        
+        // Limpa seleção
+        var sel = panel.GetComponentInChildren<SelectionManager>(true);
+        if (sel != null) {
+            sel.SelectExactly(Array.Empty<Unit>());
+            sel.ClearAnchor();
+        }
+    }
+}
+```
+
+**BlockerInputCatcher.cs:**
+```csharp
+/// <summary>
+/// Blocker customizado que diferencia cliques esquerdo e direito.
+/// </summary>
+public class BlockerInputCatcher : MonoBehaviour, IPointerClickHandler {
+    public UnityAction onLeftClick;
+    public UnityAction onRightClick;
+    
+    public void OnPointerClick(PointerEventData e) {
+        if (e.button == PointerEventData.InputButton.Left)
+            onLeftClick?.Invoke();
+        else if (e.button == PointerEventData.InputButton.Right)
+            onRightClick?.Invoke();
+    }
+}
+```
+
+**UnitListItemContextMenu + UnitContextMenuHandler:**
+
+**Responsabilidade:** Menu de clique-direito para units (ação: Follow).
+
+**Fluxo:**
+1. Clique direito em `UnitListItemHandle` → `ShowMenuAt()`
+2. Cria blocker (fecha ao clicar fora, reenvia clique direito)
+3. Instancia prefab do menu
+4. Posiciona no mouse (canto superior esquerdo)
+5. Clamp para não sair da tela
+6. Setup `UnitContextMenuHandler` com target transform
+7. Botão "Follow" → `RTSCameraCinemachineV3Controller.GoTo()`
+
+**GroupHeaderContextMenu + GroupContextMenuHandler:**
+
+**Responsabilidade:** Menu de clique-direito para grupos (ações: Rename, Delete).
+
+**Ações:**
+
+**Rename:**
+```csharp
+void OnRenameClicked() {
+    // Oculta botões
+    renameButton.gameObject.SetActive(false);
+    deleteButton.gameObject.SetActive(false);
+    
+    // Mostra InputField inline
+    renameInput.gameObject.SetActive(true);
+    renameInput.text = _targetGroup.GroupName;
+    renameInput.ActivateInputField();
+}
+
+void OnRenameInputEndEdit(string newName) {
+    if (!string.IsNullOrEmpty(newName.Trim())) {
+        _targetGroup.GroupName = newName.Trim();
+        _headerText.text = newName.Trim();
+    }
+    _contextMenu?.CloseMenu();
+}
+```
+
+**Delete:**
+```csharp
+void OnDeleteClicked() {
+    var unitsToRestore = _targetGroup.Units.ToList();
+    _rootPanel.DeleteGroupAndRestoreUnits(_targetGroup, unitsToRestore);
+    _contextMenu?.CloseMenu();
+}
+```
+
+**Relacionamentos:**
+- Anexado a: Cada `UnitListItemUI` e `GroupListItemUI`
+- Consome: `UnitListPanel`, `RTSCameraCinemachineV3Controller` (Lote 2)
+
+---
+
+## 3) REFERÊNCIA DE API (Membros Públicos)
+
+### 3.1 UnitListPanel
+
+#### Propriedades
+
+```csharp
+public RectTransform Content { get; }           // content do ScrollRect
+public SelectionManager SelectionManager { get; }
+public InputSelection InputSelection { get; }
+public RectTransform DragRoot { get; }          // Para drag visual
+public Canvas Canvas { get; }
+```
+
+#### Métodos - Inicialização
+
+**InitializeOrderFromRegistry()**
+```csharp
+/// <summary>
+/// Popula lista canônica (_order) com unidades da facção do jogador.
+/// Filtra por player.myFaction.
+/// </summary>
+void InitializeOrderFromRegistry()
+```
+
+**Build()**
+```csharp
+/// <summary>
+/// Reconstrói toda a lista visual.
+/// Destrói itens antigos e instancia novos a partir de _order.
+/// Injeta dependências em cada item (ReorderableListItem, Handle, etc).
+/// </summary>
+public void Build()
+```
+
+#### Métodos - Seleção
+
+**OnItemClicked()**
+```csharp
+/// <summary>
+/// Processa clique em item da lista.
+/// Lógica condicional baseada em Ctrl/Shift/Double.
+/// </summary>
+/// <param name="unit">Unit clicada</param>
+/// <param name="ctrl">Ctrl pressionado?</param>
+/// <param name="shift">Shift pressionado?</param>
+/// <param name="isDouble">Double-click?</param>
+public void OnItemClicked(Unit unit, bool ctrl, bool shift, bool isDouble)
+```
+
+**Lógica Interna:**
+```csharp
+if (isDouble) {
+    // Seleciona todas units do mesmo tipo (def) na lista
+    var sameType = EnumerateAllUnitsInOrder()
+        .Where(u => u.def == unit.def);
+    selection.SelectExactly(sameType);
+    return;
+}
+
+if (shift) {
+    // Range selection (âncora até item clicado)
+    // ...
+} else if (ctrl) {
+    // Toggle
+    selection.ToggleSelection(unit);
+} else {
+    // Seleção simples
+    selection.SelectExactly(new[] { unit });
+}
+
+// Atualiza âncora
+_anchorIndex = _order.FindIndex(w => w.GetUnit() == unit);
+```
+
+**SelectOnlyUnit()**
+```csharp
+/// <summary>
+/// Atalho para seleção simples (usado por context menu).
+/// </summary>
+public void SelectOnlyUnit(Unit unit)
+```
+
+**RefreshFromSelection()**
+```csharp
+/// <summary>
+/// Atualiza highlight visual de todos os itens.
+/// Chamado quando GameEvents.OnSelectionChanged dispara.
+/// </summary>
+/// <param name="selectedUnits">Lista de units selecionadas</param>
+public void RefreshFromSelection(IEnumerable<Unit> selectedUnits)
+```
+
+#### Métodos - Grupos
+
+**CreateNewGroup()**
+```csharp
+/// <summary>
+/// Cria novo grupo vazio e adiciona à lista canônica.
+/// </summary>
+/// <param name="groupName">Nome do grupo</param>
+public void CreateNewGroup(string groupName)
+```
+
+**Implementação:**
+```csharp
+var newGroup = new UnitGroup {
+    GroupName = groupName,
+    IsExpanded = true
+};
+
+_order.Add(new ListItemWrapper(newGroup));
+Build(); // Reconstrói visual
+
+// TODO: Disparar GameEvents.OnGroupCreated(newGroup)
+```
+
+**DeleteGroupAndRestoreUnits()**
+```csharp
+/// <summary>
+/// Remove grupo da lista e move suas units para a posição onde o grupo estava.
+/// </summary>
+/// <param name="group">Grupo a deletar</param>
+/// <param name="unitsToRestore">Lista de units do grupo</param>
+public void DeleteGroupAndRestoreUnits(UnitGroup group, List<Unit> unitsToRestore)
+```
+
+**Implementação:**
+```csharp
+var groupWrapper = _order.FirstOrDefault(w => 
+    w.IsGroup && w.Model == group);
+if (groupWrapper == null) return;
+
+int groupIndex = _order.IndexOf(groupWrapper);
+_order.Remove(groupWrapper);
+
+// Insere units na posição do grupo (em ordem reversa)
+for (int i = unitsToRestore.Count - 1; i >= 0; i--) {
+    var u = unitsToRestore[i];
+    _order.Insert(groupIndex, new ListItemWrapper(u));
+}
+
+Build();
+
+// TODO: Disparar GameEvents.OnGroupDeleted(group.ID)
+```
+
+**BuildGroupContent()**
+```csharp
+/// <summary>
+/// Reconstrói apenas o conteúdo visual de um grupo específico.
+/// Chamado quando grupo é expandido.
+/// </summary>
+/// <param name="group">Grupo alvo</param>
+/// <param name="subContent">RectTransform do subContent</param>
+public void BuildGroupContent(UnitGroup group, RectTransform subContent)
+```
+
+**CommitSelectionForGroup()**
+```csharp
+/// <summary>
+/// Define âncora de seleção para um grupo.
+/// Usado para range selection (Shift) iniciada em grupo.
+/// </summary>
+public void CommitSelectionForGroup(UnitGroup group)
+```
+
+#### Métodos - Drag-and-Drop
+
+**CommitDragOperation()**
+```csharp
+/// <summary>
+/// Finaliza drag-and-drop.
+/// Reconstrói _order baseado na ordem visual (sibling index).
+/// Se dropZone for fornecido, move item para dentro do grupo.
+/// </summary>
+/// <param name="draggedWrapper">Item arrastado</param>
+/// <param name="dropZone">GroupDropZone de destino (ou null)</param>
+public void CommitDragOperation(ListItemWrapper draggedWrapper, 
+                                 GroupDropZone dropZone)
+```
+
+**Lógica:**
+```csharp
+if (dropZone != null) {
+    // Drop em grupo: mover para group.Units
+    var groupModel = dropZone.GroupModel;
+    var draggedUnit = draggedWrapper.GetUnit();
+    
+    if (draggedUnit != null && !groupModel.Units.Contains(draggedUnit)) {
+        groupModel.Units.Add(draggedUnit);
+        _order.Remove(draggedWrapper);
+    }
+} else {
+    // Reordenação na raiz: reconstruir _order via sibling index
+    var newOrder = new List<ListItemWrapper>();
+    for (int i = 0; i < content.childCount; i++) {
+        var child = content.GetChild(i);
+        var marker = child.GetComponent<ListItemMarker>();
+        if (marker != null && marker.Wrapper != null) {
+            newOrder.Add(marker.Wrapper);
+        }
+    }
+    _order.Clear();
+    _order.AddRange(newOrder);
+}
+
+Build();
+```
+
+---
+
+### 3.2 ReorderableListItem
+
+#### Métodos Públicos
+
+**Setup()**
+```csharp
+/// <summary>
+/// Injeta dependências. DEVE ser chamado antes de usar.
+/// </summary>
+/// <param name="panel">UnitListPanel</param>
+/// <param name="dragRoot">RectTransform fora do ScrollView</param>
+/// <param name="canvas">Canvas da UI</param>
+/// <param name="handle">UnitListItemHandle do item</param>
+public void Setup(UnitListPanel panel, RectTransform dragRoot, 
+                  Canvas canvas, UnitListItemHandle handle)
+```
+
+#### Propriedades
+
+```csharp
+public Canvas Canvas => _canvas;
+```
+
+---
+
+### 3.3 UnitGroup
+
+#### Campos Públicos
+
+```csharp
+public string GroupName { get; set; }
+public List<Unit> Units { get; set; }
+public string ID { get; private set; }      // GUID gerado
+public bool IsExpanded { get; set; }
+public float PreferredHeight { get; set; }  // -1 = não definido
+```
+
+#### Propriedades (IListItemModel)
+
+```csharp
+public string DisplayName => GroupName;
+public bool IsGroup => true;
+public Unit GetUnit() => null;
+public IReadOnlyList<Unit> GetUnitsInItem() => Units;
+```
+
+---
+
+### 3.4 GroupListItemUI
+
+#### Métodos Públicos
+
+**Bind()**
+```csharp
+/// <summary>
+/// Vincula UnitGroup ao visual.
+/// Restaura altura preferida se definida.
+/// </summary>
+public void Bind(UnitGroup group)
+```
+
+**RefreshVisuals()**
+```csharp
+/// <summary>
+/// Atualiza estado de expansão/colapso.
+/// Controla minHeight, preferredHeight, e ResizeGripHandler.
+/// </summary>
+public void RefreshVisuals()
+```
+
+**RefreshChildrenOnly()**
+```csharp
+/// <summary>
+/// Atualiza apenas visuais de subContent (sem mexer em altura).
+/// Usado após reordenar/adicionar/remover itens aninhados.
+/// </summary>
+public void RefreshChildrenOnly()
+```
+
+**SetSelected()**
+```csharp
+/// <summary>
+/// Ativa/desativa outlines de seleção (root e header).
+/// </summary>
+public void SetSelected(bool selected)
+```
+
+---
+
+### 3.5 Context Menus
+
+#### UnitListItemContextMenu
+
+**ShowMenuAt()**
+```csharp
+/// <summary>
+/// Abre menu no local do clique.
+/// Cria blocker, instancia prefab, posiciona e clamp.
+/// </summary>
+/// <param name="screenPos">Posição do clique na tela</param>
+/// <param name="eventCam">Câmera do EventSystem</param>
+public void ShowMenuAt(Vector2 screenPos, Camera eventCam)
+```
+
+**CloseMenu()**
+```csharp
+/// <summary>
+/// Destroi menu e blocker.
+/// </summary>
+public void CloseMenu()
+```
+
+#### GroupHeaderContextMenu
+
+(API idêntica ao UnitListItemContextMenu)
+
+#### GroupContextMenuHandler
+
+**Setup()**
+```csharp
+/// <summary>
+/// Injeta dependências do grupo.
+/// </summary>
+/// <param name="panel">UnitListPanel</param>
+/// <param name="group">UnitGroup alvo</param>
+/// <param name="headerText">TMP_Text do header (para rename)</param>
+/// <param name="contextMenu">Menu que o criou (para fechar)</param>
+public void Setup(UnitListPanel panel, UnitGroup group, 
+                  TMP_Text headerText, GroupHeaderContextMenu contextMenu)
+```
+
+---
+
+## 4) EVENTOS — EMISSÃO & ASSINATURA
+
+### 4.1 Tabela de Eventos Atuais
+
+| Evento | Tipo | Disparado Por | Escutado Por |
+|--------|------|---------------|--------------|
+| `OnSelectionChanged` | `Action<IEnumerable<Unit>>` | `SelectionManager` (Lote 4) | `UnitListPanel.RefreshFromSelection` |
+| `OnUnitProgressChanged` | `Action<Unit>` | `Unit.AddXp()` (Lote 3) | `UnitListItemUI.OnUnitProgressChanged` |
+
+### 4.2 Eventos Ausentes (Crítico para Refatoração)
+
+| Evento | Tipo | Deveria Ser Disparado Por | Escutado Por |
+|--------|------|---------------------------|--------------|
+| `OnGroupCreated` | `Action<UnitGroup>` | `UnitListPanel.CreateNewGroup` | Button HUD (hotkeys) |
+| `OnGroupDeleted` | `Action<string>` | `UnitListPanel.DeleteGroupAndRestoreUnits` | Button HUD (hotkeys) |
+| `OnGroupRenamed` | `Action<UnitGroup, string>` | `GroupContextMenuHandler.OnRenameInputEndEdit` | Button HUD (hotkeys) |
+| `OnGroupHotkeyAssigned` | `Action<UnitGroup, int>` | `HotkeyManager` (futuro) | Button HUD (hotkeys) |
+| `OnUnitSpawned` | `Action<Unit>` | `UnitRegistry` (Lote 3) | `UnitListPanel` (adicionar à lista) |
+| `OnUnitDespawned` | `Action<Unit>` | `UnitRegistry` (Lote 3) | `UnitListPanel` (remover da lista) |
+
+### 4.3 Onde Escutar
+
+**UnitListPanel:**
+```csharp
+void OnEnable() {
+    GameEvents.OnSelectionChanged += RefreshFromSelection;
+    
+    // TODO: Adicionar listeners para sincronização
+    // GameEvents.OnUnitSpawned += HandleUnitSpawned;
+    // GameEvents.OnUnitDespawned += HandleUnitDespawned;
+}
+
+void OnDisable() {
+    GameEvents.OnSelectionChanged -= RefreshFromSelection;
+    // TODO: Remover listeners
+}
+```
+
+**UnitListItemUI:**
+```csharp
+public void Bind(Unit unit) {
+    // ...
+    GameEvents.OnUnitProgressChanged += OnUnitProgressChanged;
+}
+
+public void Unbind() {
+    if (_unit != null) {
+        GameEvents.OnUnitProgressChanged -= OnUnitProgressChanged;
+    }
+    _unit = null;
+}
+
+void OnUnitProgressChanged(Unit changedUnit) {
+    if (changedUnit == _unit) {
+        Refresh();
+    }
+}
+```
+
+**Button HUD (Futuro):**
+```csharp
+void OnEnable() {
+    GameEvents.OnGroupCreated += AddGroupHotkeyButton;
+    GameEvents.OnGroupDeleted += RemoveGroupHotkeyButton;
+    GameEvents.OnGroupRenamed += UpdateGroupHotkeyButton;
+}
+```
+
+### 4.4 Padrões Recomendados
+
+#### ✅ Sempre Desinscrever
+
+```csharp
+void OnEnable() {
+    GameEvents.OnSelectionChanged += Handler;
+}
+
+void OnDisable() {
+    GameEvents.OnSelectionChanged -= Handler; // CRÍTICO!
+}
+```
+
+#### ✅ Filtrar Eventos Quando Necessário
+
+```csharp
+void OnUnitProgressChanged(Unit unit) {
+    // Filtro: apenas a unit vinculada
+    if (unit != _unit) return;
+    
+    // Processar...
+}
+```
+
+#### ✅ Verificar Nulos
+
+```csharp
+void HandleGroupCreated(UnitGroup group) {
+    if (group == null) return;
+    if (string.IsNullOrEmpty(group.GroupName)) {
+        Debug.LogWarning("Grupo sem nome!");
+        return;
+    }
+    // Processar...
+}
+```
+
+---
+
+## 5) VARIÁVEIS-CHAVE / CONFIGURAÇÕES (DESTAQUES)
+
+### 5.1 UnitListPanel
+
+| Campo | Tipo | Padrão | Impacto |
+|-------|------|--------|---------|
+| `dragAlpha` | `float` | 0.6 | Transparência do item original durante drag |
+
+### 5.2 ReorderableListItem
+
+| Campo | Tipo | Padrão | Impacto |
+|-------|------|--------|---------|
+| `dragStartThreshold` | `float` | 5 | Pixels necessários para iniciar drag (evita drag acidental) |
+
+### 5.3 UnitListItemHandle
+
+| Campo | Tipo | Padrão | Impacto |
+|-------|------|--------|---------|
+| `doubleClickMaxDelay` | `float` | 0.30 | Intervalo máximo entre cliques para double-click (segundos) |
+
+### 5.4 ResizeGripHandler
+
+| Campo | Tipo | Padrão | Impacto |
+|-------|------|--------|---------|
+| `minHeight` | `float` | 200 | Altura mínima de grupos expandidos (px) |
+| `maxHeight` | `float` | 1000 | Altura máxima de grupos expandidos (px) |
+| `edgeHotZonePx` | `float` | 80 | Zona quente para auto-scroll (px da borda) |
+| `maxScrollSpeedPxPerSec` | `float` | 900 | Velocidade máxima de auto-scroll (px/s) |
+
+### 5.5 GroupDropZone
+
+| Campo | Tipo | Padrão | Impacto |
+|-------|------|--------|---------|
+| `SUPPRESS_DRAG_FRAME` | `const int` | 2 | Frames de supressão de clique após drop |
+
+---
+
+## 6) EXEMPLOS COMPOSTOS (END-TO-END)
+
+### 6.1 Sistema de Seleção na Lista
+
+```csharp
+public class SelectionExample : MonoBehaviour
+{
+    [SerializeField] UnitListPanel listPanel;
+    [SerializeField] SelectionManager selection;
+    
+    void Start() {
+        // Exemplo: Selecionar programaticamente
+        var allUnits = UnitRegistry.GetByFaction(FactionId.Player1);
+        var firstUnit = allUnits.FirstOrDefault();
+        
+        if (firstUnit != null) {
+            selection.SelectExactly(new[] { firstUnit });
+            // UnitListPanel escuta GameEvents.OnSelectionChanged e atualiza visual
+        }
+    }
+}
+```
+
+**Fluxo Bidirecional:**
+
+```
+Clique na Lista:
+UnitListItemHandle.OnPointerClick()
+  → UnitListPanel.OnItemClicked()
+    → SelectionManager.SelectExactly()
+      → GameEvents.RaiseSelectionChanged()
+        → UnitListPanel.RefreshFromSelection()
+        → Unit.SetSelected(true) (mundo 3D)
+
+Clique no Mundo 3D:
+WorldPicker detecta clique
+  → SelectionManager.SetSelected()
+    → GameEvents.RaiseSelectionChanged()
+      → UnitListPanel.RefreshFromSelection()
+        → UnitListItemUI.SetSelected(true) (highlight visual)
+```
+
+---
+
+### 6.2 Drag-and-Drop de Units
+
+```csharp
+// Cenário: Usuário arrasta Unit 3 para cima de Unit 1
+
+// 1. OnBeginDrag (ReorderableListItem)
+void OnBeginDrag(PointerEventData e) {
+    // Cria ghost (cópia visual)
+    _ghostRT = Instantiate(gameObject, _dragRoot).GetComponent<RectTransform>();
+    // Cria placeholder (mantém posição)
+    _placeholderRT = new GameObject("Placeholder").AddComponent<RectTransform>();
+    // Reduz alpha do original
+    _originalCanvasGroup.alpha = _panel.dragAlpha;
+}
+
+// 2. OnDrag (ReorderableListItem)
+void OnDrag(PointerEventData e) {
+    // Move ghost seguindo mouse
+    _ghostRT.position = e.position;
+    
+    // Detecta inserção
+    int insertIndex = CalculateInsertionIndex(ghostWorldY, content);
+    
+    // Reordena placeholder
+    if (insertIndex != _placeholderRT.GetSiblingIndex()) {
+        _placeholderRT.SetSiblingIndex(insertIndex);
+        LayoutRebuilder.ForceRebuildLayoutImmediate(content);
+    }
+}
+
+// 3. OnEndDrag (ReorderableListItem)
+void OnEndDrag(PointerEventData e) {
+    // Detecta drop em grupo (se houver)
+    var dropZone = DetectGroupDropZone(e);
+    
+    // Restaura visuais
+    Destroy(_ghostRT.gameObject);
+    Destroy(_placeholderRT.gameObject);
+    _originalCanvasGroup.alpha = 1f;
+    
+    // Commit
+    var wrapper = GetComponent<ListItemMarker>().Wrapper;
+    _panel.CommitDragOperation(wrapper, dropZone);
+    
+    // Suprime próximo clique
+    _handle.IgnoreNextClickOnce();
+}
+
+// 4. CommitDragOperation (UnitListPanel)
+public void CommitDragOperation(ListItemWrapper draggedWrapper, 
+                                 GroupDropZone dropZone) {
+    if (dropZone == null) {
+        // Reordenação na raiz
+        RebuildOrderFromVisual();
+    } else {
+        // Drop em grupo
+        var group = dropZone.GroupModel;
+        var unit = draggedWrapper.GetUnit();
+        group.Units.Add(unit);
+        _order.Remove(draggedWrapper);
+    }
+    
+    Build(); // Reconstrói visual
+}
+```
+
+---
+
+### 6.3 Criação e Gerenciamento de Grupos
+
+**Criação:**
+```csharp
+public class GroupCreationExample : MonoBehaviour
+{
+    [SerializeField] UnitListPanel panel;
+    [SerializeField] SelectionManager selection;
+    
+    public void CreateGroupWithSelected() {
+        var selectedUnits = selection.Selection.ToList();
+        if (selectedUnits.Count == 0) {
+            Debug.Log("Nenhuma unit selecionada!");
+            return;
+        }
+        
+        // TODO: Método ainda não existe, precisa ser criado
+        // panel.CreateNewGroupAndPopulate("Meu Grupo", selectedUnits);
+        
+        // Workaround atual:
+        panel.CreateNewGroup("Meu Grupo"); // Cria vazio
+        
+        // Manualmente mover units para o grupo criado:
+        var newGroup = panel._order.Last() as UnitGroup; // Hack: último item
+        if (newGroup != null) {
+            foreach (var unit in selectedUnits) {
+                newGroup.Units.Add(unit);
+                var wrapper = panel._order.FirstOrDefault(w => w.GetUnit() == unit);
+                if (wrapper != null) panel._order.Remove(wrapper);
+            }
+            panel.Build();
+        }
+    }
+}
+```
+
+**Rename:**
+```csharp
+// Usuário clica direito no header do grupo
+// GroupHeaderContextMenu abre popup
+// Usuário clica "Rename"
+// InputField aparece no lugar dos botões
+// Usuário digita novo nome e aperta Enter
+
+void OnRenameInputEndEdit(string newName) {
+    if (!string.IsNullOrEmpty(newName.Trim())) {
+        _targetGroup.GroupName = newName.Trim();
+        _headerText.text = newName.Trim();
+        
+        // TODO: Disparar evento
+        // GameEvents.RaiseGroupRenamed(_targetGroup, newName);
+    }
+    _contextMenu?.CloseMenu();
+}
+```
+
+**Delete:**
+```csharp
+// Usuário clica "Delete" no context menu
+void OnDeleteClicked() {
+    var unitsToRestore = _targetGroup.Units.ToList();
+    _rootPanel.DeleteGroupAndRestoreUnits(_targetGroup, unitsToRestore);
+    
+    // TODO: Disparar evento
+    // GameEvents.RaiseGroupDeleted(_targetGroup.ID);
+    
+    _contextMenu?.CloseMenu();
+}
+
+// DeleteGroupAndRestoreUnits (UnitListPanel)
+public void DeleteGroupAndRestoreUnits(UnitGroup group, List<Unit> units) {
+    var groupWrapper = _order.FirstOrDefault(w => 
+        w.IsGroup && w.Model == group);
+    if (groupWrapper == null) return;
+    
+    int groupIndex = _order.IndexOf(groupWrapper);
+    _order.Remove(groupWrapper);
+    
+    // Insere units na posição do grupo
+    for (int i = units.Count - 1; i >= 0; i--) {
+        _order.Insert(groupIndex, new ListItemWrapper(units[i]));
+    }
+    
+    Build();
+}
+```
+
+---
+
+### 6.4 Context Menus e Follow Camera
+
+**Follow (Unit Context Menu):**
+```csharp
+// UnitContextMenuHandler.cs
+void OnFollow() {
+    if (_target == null) return;
+    
+    var cam = Object.FindFirstObjectByType<RTSCameraCinemachineV3Controller>();
+    if (cam != null) {
+        cam.GoTo(_target.position, snap: false, moveDuration: 0.5f);
+    }
+    
+    _owner?.CloseMenu();
+}
+```
+
+**Forward Right-Click:**
+```csharp
+// Usuário clica direito no blocker (fora do menu)
+// Blocker detecta clique direito
+// Fecha menu atual
+// Reenvia clique para qualquer item embaixo do mouse
+
+void ForwardRightClickToAnyContextTarget() {
+    var es = EventSystem.current;
+    if (es == null) return;
+    
+    var pointer = new PointerEventData(es) {
+        position = Mouse.current.position.ReadValue(),
+        button = PointerEventData.InputButton.Right
+    };
+    
+    var results = new List<RaycastResult>();
+    es.RaycastAll(pointer, results);
+    
+    foreach (var r in results) {
+        var unitCtx = r.gameObject.GetComponent<UnitListItemHandle>();
+        if (unitCtx != null) {
+            unitCtx.OnPointerClick(pointer);
+            return;
+        }
+        
+        var groupCtx = r.gameObject.GetComponent<GroupHeaderContextMenu>();
+        if (groupCtx != null) {
+            groupCtx.OnPointerClick(pointer);
+            return;
+        }
+    }
+}
+```
+
+---
+
+## 7) NOTAS DE IMPLEMENTAÇÃO & BOAS PRÁTICAS
+
+### 7.1 Ordem de Inicialização
+
+- ✅ `UnitListPanel.OnEnable()` chama `InitializeOrderFromRegistry()` e `Build()`
+- ✅ `Build()` injeta dependências em cada item (Setup de ReorderableListItem, Handle, etc.)
+- ✅ `Bind()` em UnitListItemUI/GroupListItemUI vincula dados aos visuais
+- ⚠️ **Não** modificar `_order` diretamente fora de métodos do painel
+
+### 7.2 Uso de ListItemWrapper
+
+- ✅ Sempre criar via construtores: `new ListItemWrapper(unit)` ou `new ListItemWrapper(group)`
+- ✅ Usar `wrapper.IsGroup` para determinar tipo
+- ✅ Usar `wrapper.GetUnit()` ou `wrapper.GetUnitsInItem()` para acessar dados
+- ⚠️ **Não** fazer cast direto de `wrapper.Model` (usar interface)
+
+### 7.3 Performance e Otimização
+
+**Build() é custoso:**
+```csharp
+// ❌ RUIM: Chamar Build() toda frame
+void Update() {
+    panel.Build(); // GC spikes!
+}
+
+// ✅ BOM: Chamar Build() apenas quando necessário
+void OnGroupCreated() {
+    panel.Build(); // Uma vez após mudança
+}
+
+// ✅ MELHOR: Usar BuildGroupContent() para updates parciais
+void OnGroupExpanded(UnitGroup group, RectTransform subContent) {
+    panel.BuildGroupContent(group, subContent); // Apenas o grupo
+}
+```
+
+**Pooling (Futuro):**
+```csharp
+// TODO: Implementar pooling para evitar Instantiate/Destroy
+// Ver Seção 10.3 (Refatoração)
+```
+
+### 7.4 Drag-and-Drop e Cliques
+
+**Supressão de Clique Pós-Drag:**
+```csharp
+// OnEndDrag do ReorderableListItem SEMPRE deve chamar:
+_handle.IgnoreNextClickOnce();
+
+// Isso previne que o OnPointerClick dispare logo após soltar o drag
+```
+
+**Threshold de Drag:**
+```csharp
+// dragStartThreshold = 5px
+// Se movimento < 5px, não inicia drag (considera como clique)
+```
+
+### 7.5 Context Menus
+
+**Posicionamento:**
+```csharp
+// Canto superior esquerdo do menu no mouse
+pos.x -= size.x * pivot.x;          // esquerda no mouse
+pos.y += size.y * (1f - pivot.y);   // topo no mouse
+```
+
+**Clamping:**
+```csharp
+// Garante que menu não sai da tela
+ClampToParent(parentRect, menuRect);
+```
+
+**Blocker:**
+```csharp
+// Usa BlockerInputCatcher para diferenciar left/right
+// Left click → CloseMenu()
+// Right click → CloseMenu() + ForwardRightClick()
+```
+
+### 7.6 Grupos
+
+**Expansão/Colapso:**
+```csharp
+// Sempre usar RefreshVisuals() após mudar IsExpanded
+group.IsExpanded = true;
+groupUI.RefreshVisuals(); // Atualiza minHeight, preferredHeight, grip
+
+// Para updates parciais (sem mexer em altura):
+groupUI.RefreshChildrenOnly();
+```
+
+**Altura Persistida:**
+```csharp
+// Salva via PlayerPrefs ao finalizar resize
+string key = "GroupHeight_" + group.ID;
+PlayerPrefs.SetFloat(key, preferredHeight);
+PlayerPrefs.Save();
+
+// Carrega em Bind()
+if (PlayerPrefs.HasKey(key)) {
+    rootLayout.preferredHeight = PlayerPrefs.GetFloat(key);
+}
+```
+
+---
+
+## 8) INTEGRAÇÃO COM OUTROS MÓDULOS
+
+### 8.1 Lote 3 (Unit System)
+
+**Consumo de Dados:**
+```csharp
+// UnitListItemUI consome:
+string name = unit.DisplayName;
+Sprite icon = unit.def?.icon;
+int level = unit.Level;
+float xpProgress = unit.Xp01;
+```
+
+**Escuta de Eventos:**
+```csharp
+void OnEnable() {
+    GameEvents.OnUnitProgressChanged += OnUnitProgressChanged;
+}
+
+void OnUnitProgressChanged(Unit unit) {
+    if (unit != _unit) return; // Filtro
+    
+    // Atualiza visual
+    levelText.text = unit.Level.ToString();
+    SetXp01(unit.Xp01);
+}
+```
+
+**Sincronização com Spawn/Despawn (Futuro):**
+```csharp
+// TODO: Implementar listeners em UnitListPanel
+void OnEnable() {
+    GameEvents.OnUnitSpawned += HandleUnitSpawned;
+    GameEvents.OnUnitDespawned += HandleUnitDespawned;
+}
+
+void HandleUnitSpawned(Unit unit) {
+    if (unit.owner != player.myFaction) return;
+    
+    // Adicionar à _order sem Build completo
+    _order.Add(new ListItemWrapper(unit));
+    // Instanciar apenas o item novo (pooling)
+    InstantiateItem(unit);
+}
+
+void HandleUnitDespawned(Unit unit) {
+    var wrapper = _order.FirstOrDefault(w => w.GetUnit() == unit);
+    if (wrapper != null) {
+        _order.Remove(wrapper);
+        // Destruir apenas o item (pooling)
+        DestroyItem(wrapper);
+    }
+}
+```
+
+---
+
+### 8.2 Lote 4 (Selection System)
+
+**Disparo de Comandos:**
+```csharp
+// UnitListPanel.OnItemClicked() delega para SelectionManager
+void OnItemClicked(Unit unit, bool ctrl, bool shift, bool isDouble) {
+    if (isDouble) {
+        // Selecionar mesmo tipo
+        var sameType = EnumerateAllUnitsInOrder()
+            .Where(u => u.def == unit.def);
+        selection.SelectExactly(sameType);
+    } else if (shift) {
+        // Range selection
+        SelectRange(unit);
+    } else if (ctrl) {
+        // Toggle
+        selection.ToggleSelection(unit);
+    } else {
+        // Simples
+        selection.SelectExactly(new[] { unit });
+    }
+}
+```
+
+**Escuta de Mudanças:**
+```csharp
+void OnEnable() {
+    GameEvents.OnSelectionChanged += RefreshFromSelection;
+}
+
+void RefreshFromSelection(IEnumerable<Unit> selectedUnits) {
+    var selectedSet = new HashSet<Unit>(selectedUnits);
+    
+    // Atualiza highlight de cada item
+    foreach (Transform child in content) {
+        var ui = child.GetComponent<UnitListItemUI>();
+        if (ui != null) {
+            ui.SetSelected(selectedSet.Contains(ui.Unit));
+        }
+        
+        var groupUI = child.GetComponent<GroupListItemUI>();
+        if (groupUI != null) {
+            // Grupo selecionado se TODAS suas units estão selecionadas
+            bool allSelected = groupUI.Units.All(u => selectedSet.Contains(u));
+            groupUI.SetSelected(allSelected);
+        }
+    }
+}
+```
+
+---
+
+### 8.3 Lote 2 (Camera System)
+
+**Context Menu "Follow":**
+```csharp
+void OnFollow() {
+    if (_target == null) return;
+    
+    var cam = Object.FindFirstObjectByType<RTSCameraCinemachineV3Controller>();
+    if (cam != null) {
+        // Usa API do Lote 2 para mover câmera
+        cam.GoTo(_target.position, snap: false, moveDuration: 0.5f);
+    }
+    
+    _owner?.CloseMenu();
+}
+```
+
+**Alternativa (Via Eventos):**
+```csharp
+// Melhor: Usar GameEvents para desacoplar
+void OnFollow() {
+    if (_target == null) return;
+    
+    GameEvents.RaiseCameraFocus(_target.position, snap: false, duration: 0.5f);
+    
+    _owner?.CloseMenu();
+}
+```
+
+---
+
+## 9) TROUBLESHOOTING (PROBLEMAS COMUNS)
+
+### Problema: Items não aparecem na lista
+
+**Possíveis Causas:**
+1. `player.myFaction` não corresponde a `unit.owner`
+2. `UnitRegistry` não contém units da facção
+3. Prefabs não foram atribuídos no Inspector
+
+**Debug:**
+```csharp
+void Start() {
+    Debug.Log($"Player faction: {player.myFaction}");
+    Debug.Log($"Units in registry: {UnitRegistry.All.Count}");
+    Debug.Log($"Units of player faction: {UnitRegistry.GetByFaction(player.myFaction).Count}");
+}
+```
+
+**Solução:**
+- Verificar `PlayerController.myFaction` no Inspector
+- Verificar que units têm `owner` correto
+- Verificar que prefabs estão atribuídos em `UnitListPanel`
+
+---
+
+### Problema: Drag não funciona ou items "grudam"
+
+**Possíveis Causas:**
+1. `dragRoot` não foi atribuído
+2. `dragStartThreshold` muito alto
+3. `ReorderableListItem` não foi injetado com `Setup()`
+
+**Debug:**
+```csharp
+void OnBeginDrag(PointerEventData e) {
+    if (_dragRoot == null) {
+        Debug.LogError("DragRoot não foi atribuído!");
+        return;
+    }
+    Debug.Log("Drag iniciado!");
+}
+```
+
+**Solução:**
+- Criar GameObject `DragRoot` fora do ScrollView
+- Atribuir em `UnitListPanel.dragRoot`
+- Verificar que `Build()` chama `rei.Setup()`
+
+---
+
+### Problema: Clique acidental após drag
+
+**Causa:** `IgnoreNextClickOnce()` não foi chamado
+
+**Solução:**
+```csharp
+// Em ReorderableListItem.OnEndDrag():
+_handle.IgnoreNextClickOnce(); // SEMPRE chamar
+```
+
+---
+
+### Problema: Context menu não aparece
+
+**Possíveis Causas:**
+1. `contextMenuPrefab` não foi atribuído
+2. `Canvas` não foi encontrado
+3. Blocker está bloqueando raycast antes do menu aparecer
+
+**Debug:**
+```csharp
+public void ShowMenuAt(Vector2 screenPos, Camera eventCam) {
+    if (!contextMenuPrefab) {
+        Debug.LogError("Context menu prefab não atribuído!");
+        return;
+    }
+    Debug.Log("Abrindo menu...");
+}
+```
+
+**Solução:**
+- Criar prefab do menu com `UnitContextMenuHandler` ou `GroupContextMenuHandler`
+- Atribuir em `UnitListItemContextMenu.contextMenuPrefab`
+
+---
+
+### Problema: Grupos não expandem/colapsam
+
+**Possíveis Causas:**
+1. `expandToggle` não está vinculado no prefab
+2. `subContent` não foi atribuído
+3. `RefreshVisuals()` não foi chamado após mudar `IsExpanded`
+
+**Debug:**
+```csharp
+void OnToggleValueChanged(bool isExpanded) {
+    Debug.Log($"Toggle mudou: {isExpanded}");
+    if (_groupModel == null) {
+        Debug.LogError("GroupModel é null!");
+        return;
+    }
+    _groupModel.IsExpanded = isExpanded;
+    RefreshVisuals();
+}
+```
+
+**Solução:**
+- Vincular `Toggle` ao `GroupListItemUI.expandToggle`
+- Atribuir `subContent` no prefab
+- Verificar que `OnToggleValueChanged` está conectado
+
+---
+
+### Problema: Resize de grupo não funciona
+
+**Possíveis Causas:**
+1. `ResizeGripHandler` não foi habilitado
+2. `mainScrollRect` ou `mainViewport` não foram atribuídos
+3. Grupo está colapsado (grip desabilitado por design)
+
+**Debug:**
+```csharp
+void OnPointerDown(PointerEventData e) {
+    Debug.Log("Resize grip clicado!");
+    if (targetLayoutElement == null) {
+        Debug.LogError("LayoutElement não foi atribuído!");
+        return;
+    }
+}
+```
+
+**Solução:**
+- Verificar que grupo está expandido
+- Atribuir `mainScrollRect` e `mainViewport` no Inspector
+- Verificar que `ResizeGripHandler.enabled = true` quando expandido
+
+---
+
+### Problema: Performance ruim com muitas units
+
+**Causa:** `Build()` reconstrói toda a lista com Instantiate/Destroy
+
+**Solução:**
+- Implementar object pooling (ver Seção 10.3)
+- Usar `BuildGroupContent()` para updates parciais
+- Limitar número de units visíveis (virtualização)
+
+---
+
+### Problema: Sincronização de seleção falha
+
+**Possíveis Causas:**
+1. `GameEvents.OnSelectionChanged` não está conectado
+2. `RefreshFromSelection()` não está filtrando corretamente
+3. `SetSelected()` não está sendo chamado
+
+**Debug:**
+```csharp
+void RefreshFromSelection(IEnumerable<Unit> selectedUnits) {
+    Debug.Log($"RefreshFromSelection chamado: {selectedUnits.Count()} units");
+    foreach (var unit in selectedUnits) {
+        Debug.Log($"  - {unit.DisplayName}");
+    }
+}
+```
+
+**Solução:**
+- Verificar que `OnEnable` conecta evento
+- Verificar que `OnDisable` desconecta evento (memory leak)
+- Adicionar logs em `SetSelected()` para debug
+
+---
+
+## 10) SUGESTÕES DE REFATORAÇÃO E MELHORIA DE COESÃO
+
+### 10.1 Eventos de Grupos (Comunicação Inter-HUD) ⭐ **PRIORIDADE 1**
+
+**Problema:**
+- Button HUD não pode reagir a criação/deleção/rename de grupos
+- Não há comunicação entre LEFT BAR e BUTTON HUD
+
+**Solução:**
+
+**Adicionar ao GameEvents.cs:**
+```csharp
+// ========== GRUPOS ==========
+/// <summary>Disparado quando grupo é criado</summary>
+public static event Action<UnitGroup> OnGroupCreated;
+
+/// <summary>Disparado quando grupo é deletado</summary>
+public static event Action<string> OnGroupDeleted; // groupId
+
+/// <summary>Disparado quando grupo é renomeado</summary>
+public static event Action<UnitGroup, string> OnGroupRenamed; // group, newName
+
+/// <summary>Disparado quando grupo é vinculado a hotkey</summary>
+public static event Action<UnitGroup, int> OnGroupHotkeyAssigned; // group, hotkeyIndex (1-9)
+
+// Helpers
+public static void RaiseGroupCreated(UnitGroup group)
+    => OnGroupCreated?.Invoke(group);
+
+public static void RaiseGroupDeleted(string groupId)
+    => OnGroupDeleted?.Invoke(groupId);
+
+public static void RaiseGroupRenamed(UnitGroup group, string newName)
+    => OnGroupRenamed?.Invoke(group, newName);
+
+public static void RaiseGroupHotkeyAssigned(UnitGroup group, int hotkeyIndex)
+    => OnGroupHotkeyAssigned?.Invoke(group, hotkeyIndex);
+```
+
+**Atualizar UnitListPanel.cs:**
+```csharp
+public void CreateNewGroup(string groupName) {
+    var newGroup = new UnitGroup {
+        GroupName = groupName,
+        IsExpanded = true
+    };
+    
+    _order.Add(new ListItemWrapper(newGroup));
+    Build();
+    
+    // ADICIONAR:
+    GameEvents.RaiseGroupCreated(newGroup);
+}
+
+public void DeleteGroupAndRestoreUnits(UnitGroup group, List<Unit> units) {
+    // ... lógica existente ...
+    Build();
+    
+    // ADICIONAR:
+    GameEvents.RaiseGroupDeleted(group.ID);
+}
+```
+
+**Atualizar GroupContextMenuHandler.cs:**
+```csharp
+void OnRenameInputEndEdit(string newName) {
+    if (!string.IsNullOrEmpty(newName.Trim())) {
+        var oldName = _targetGroup.GroupName;
+        _targetGroup.GroupName = newName.Trim();
+        _headerText.text = newName.Trim();
+        
+        // ADICIONAR:
+        GameEvents.RaiseGroupRenamed(_targetGroup, newName.Trim());
+    }
+    _contextMenu?.CloseMenu();
+}
+```
+
+**Button HUD (Futuro) escutaria:**
+```csharp
+void OnEnable() {
+    GameEvents.OnGroupCreated += AddGroupHotkeyButton;
+    GameEvents.OnGroupDeleted += RemoveGroupHotkeyButton;
+    GameEvents.OnGroupRenamed += UpdateGroupHotkeyButtonLabel;
+}
+
+void AddGroupHotkeyButton(UnitGroup group) {
+    // Criar botão visual no Button HUD
+    // Permitir usuário pressionar CTRL+1 para vincular
+}
+```
+
+**Benefícios:**
+- ✅ Desacopla LEFT BAR de BUTTON HUD
+- ✅ Permite reutilização de UnitListPanel em outras cenas
+- ✅ Facilita teste unitário (mock de eventos)
+
+---
+
+### 10.2 Sincronização com Spawn/Despawn ⭐ **PRIORIDADE 1**
+
+**Problema:**
+- Units que spawnam durante gameplay não aparecem na lista
+- Units que despawnam não são removidas da lista
+
+**Solução:**
+
+**Atualizar UnitListPanel.cs:**
+```csharp
+void OnEnable() {
+    InitializeOrderFromRegistry();
+    Build();
+    GameEvents.OnSelectionChanged += RefreshFromSelection;
+    
+    // ADICIONAR:
+    GameEvents.OnUnitSpawned += HandleUnitSpawned;
+    GameEvents.OnUnitDespawned += HandleUnitDespawned;
+}
+
+void OnDisable() {
+    GameEvents.OnSelectionChanged -= RefreshFromSelection;
+    
+    // ADICIONAR:
+    GameEvents.OnUnitSpawned -= HandleUnitSpawned;
+    GameEvents.OnUnitDespawned -= HandleUnitDespawned;
+}
+
+void HandleUnitSpawned(Unit unit) {
+    // Filtrar por facção
+    if (unit.owner != player.myFaction) return;
+    
+    // Verificar se já existe (duplicatas)
+    if (_order.Any(w => w.GetUnit() == unit)) return;
+    
+    // Adicionar à lista lógica
+    _order.Add(new ListItemWrapper(unit));
+    
+    // Instanciar item visual (pooling se disponível)
+    InstantiateItemForUnit(unit);
+    
+    // Layout rebuild
+    LayoutRebuilder.ForceRebuildLayoutImmediate(content);
+}
+
+void HandleUnitDespawned(Unit unit) {
+    // Remover da lista lógica
+    var wrapper = _order.FirstOrDefault(w => w.GetUnit() == unit);
+    if (wrapper == null) return;
+    
+    _order.Remove(wrapper);
+    
+    // Remover grupos vazios (opcional)
+    foreach (var groupWrapper in _order.Where(w => w.IsGroup).ToList()) {
+        var group = groupWrapper.Model as UnitGroup;
+        if (group != null) {
+            group.Units.RemoveAll(u => u == unit);
+            
+            // Se grupo ficou vazio, remover
+            if (group.Units.Count == 0) {
+                _order.Remove(groupWrapper);
+                GameEvents.RaiseGroupDeleted(group.ID);
+            }
+        }
+    }
+    
+    // Destruir item visual (pooling se disponível)
+    DestroyItemForUnit(unit);
+    
+    // Layout rebuild
+    LayoutRebuilder.ForceRebuildLayoutImmediate(content);
+}
+
+void InstantiateItemForUnit(Unit unit) {
+    // TODO: Usar pooling (ver 10.3)
+    var visualGO = Instantiate(unitPrefab, content);
+    visualGO.Bind(unit);
+    // Injetar dependências (Handle, ReorderableListItem, etc.)
+}
+
+void DestroyItemForUnit(Unit unit) {
+    // TODO: Usar pooling (ver 10.3)
+    foreach (Transform child in content) {
+        var ui = child.GetComponent<UnitListItemUI>();
+        if (ui != null && ui.Unit == unit) {
+            Destroy(child.gameObject);
+            return;
+        }
+    }
+}
+```
+
+**Benefícios:**
+- ✅ Lista sempre sincronizada com `UnitRegistry`
+- ✅ Evita `Build()` completo (melhor performance)
+- ✅ Remove grupos vazios automaticamente
+
+---
+
+### 10.3 Object Pooling ⭐ **PRIORIDADE 2**
+
+**Problema:**
+- `Build()` usa `Instantiate/Destroy` causando GC spikes
+- Performance ruim com muitas units
+
+**Solução:**
+
+**Criar PoolingManager:**
+```csharp
+public class ListItemPool
+{
+    private readonly Stack<UnitListItemUI> _unitItemPool = new();
+    private readonly Stack<GroupListItemUI> _groupItemPool = new();
+    
+    private readonly UnitListItemUI _unitPrefab;
+    private readonly GroupListItemUI _groupPrefab;
+    private readonly Transform _poolRoot;
+    
+    public ListItemPool(UnitListItemUI unitPrefab, GroupListItemUI groupPrefab, 
+                        Transform poolRoot) {
+        _unitPrefab = unitPrefab;
+        _groupPrefab = groupPrefab;
+        _poolRoot = poolRoot;
+    }
+    
+    public UnitListItemUI GetOrCreateUnitItem(Transform parent) {
+        if (_unitItemPool.Count > 0) {
+            var item = _unitItemPool.Pop();
+            item.transform.SetParent(parent, false);
+            item.gameObject.SetActive(true);
+            return item;
+        }
+        return Object.Instantiate(_unitPrefab, parent);
+    }
+    
+    public void ReturnUnitItem(UnitListItemUI item) {
+        item.Unbind();
+        item.gameObject.SetActive(false);
+        item.transform.SetParent(_poolRoot, false);
+        _unitItemPool.Push(item);
+    }
+    
+    // Similar para GroupListItemUI
+    public GroupListItemUI GetOrCreateGroupItem(Transform parent) { /* ... */ }
+    public void ReturnGroupItem(GroupListItemUI item) { /* ... */ }
+}
+```
+
+**Atualizar UnitListPanel:**
+```csharp
+private ListItemPool _pool;
+
+void Awake() {
+    var poolRoot = new GameObject("_ListItemPool").transform;
+    poolRoot.SetParent(transform, false);
+    poolRoot.gameObject.SetActive(false);
+    
+    _pool = new ListItemPool(unitPrefab, groupPrefab, poolRoot);
+}
+
+public void Build() {
+    // Retornar todos os itens para o pool
+    foreach (Transform child in content) {
+        var ui = child.GetComponent<UnitListItemUI>();
+        if (ui != null) {
+            _pool.ReturnUnitItem(ui);
+            continue;
+        }
+        
+        var groupUI = child.GetComponent<GroupListItemUI>();
+        if (groupUI != null) {
+            _pool.ReturnGroupItem(groupUI);
+        }
+    }
+    
+    // Criar novos itens do pool
+    foreach (var wrapper in _order) {
+        if (wrapper.IsGroup) {
+            var groupUI = _pool.GetOrCreateGroupItem(content);
+            groupUI.Bind((UnitGroup)wrapper.Model);
+            // Setup...
+        } else {
+            var unitUI = _pool.GetOrCreateUnitItem(content);
+            unitUI.Bind(wrapper.GetUnit());
+            // Setup...
+        }
+    }
+}
+```
+
+**Benefícios:**
+- ✅ Elimina GC spikes de Instantiate/Destroy
+- ✅ Melhora performance com muitas units
+- ✅ Reaproveitamento de GameObjects
+
+---
+
+### 10.4 Base Class para Context Menus ⭐ **PRIORIDADE 2**
+
+**Problema:**
+- `UnitListItemContextMenu` e `GroupHeaderContextMenu` têm ~80% de código duplicado
+- Difícil manter e estender
+
+**Solução:**
+
+**Criar BaseContextMenu:**
+```csharp
+public abstract class BaseContextMenu : MonoBehaviour, IPointerClickHandler
+{
+    [Header("Prefab do menu")]
+    [SerializeField] protected RectTransform contextMenuPrefab;
+    
+    [Header("Layout")]
+    [SerializeField] protected Vector2 screenPadding = new Vector2(8f, 8f);
+    [SerializeField] protected Color blockerColor = new Color(0, 0, 0, 0.001f);
+    
+    protected RectTransform _menu;
+    protected GameObject _blocker;
+    
+    public void OnPointerClick(PointerEventData eventData) {
+        if (eventData.button == PointerEventData.InputButton.Right) {
+            ShowMenuAt(eventData.position, eventData.pressEventCamera);
+        } else if (eventData.button == PointerEventData.InputButton.Left) {
+            CloseMenu();
+        }
+    }
+    
+    protected void ShowMenuAt(Vector2 screenPos, Camera eventCam) {
+        CloseMenu();
+        if (!contextMenuPrefab) return;
+        
+        var parent = GetParentCanvas();
+        if (parent == null) return;
+        
+        CreateBlocker(parent);
+        InstantiateMenu(parent, screenPos, eventCam);
+        SetupMenuHandler(); // Abstract
+        ClampToParent(parent, _menu);
+    }
+    
+    protected abstract void SetupMenuHandler();
+    
+    protected RectTransform GetParentCanvas() {
+        var canvas = GetComponentInParent<Canvas>();
+        return canvas ? canvas.transform as RectTransform : null;
+    }
+    
+    protected void CreateBlocker(RectTransform parent) {
+        _blocker = new GameObject("ContextMenuBlocker",
+            typeof(RectTransform), typeof(CanvasRenderer), 
+            typeof(Image), typeof(BlockerInputCatcher));
+        
+        var brt = (RectTransform)_blocker.transform;
+        brt.SetParent(parent, false);
+        brt.anchorMin = Vector2.zero;
+        brt.anchorMax = Vector2.one;
+        brt.offsetMin = Vector2.zero;
+        brt.offsetMax = Vector2.zero;
+        brt.SetAsLastSibling();
+        
+        var bImg = _blocker.GetComponent<Image>();
+        bImg.color = blockerColor;
+        
+        var catcher = _blocker.GetComponent<BlockerInputCatcher>();
+        catcher.onLeftClick = CloseMenu;
+        catcher.onRightClick = () => {
+            CloseMenu();
+            ForwardRightClickToAnyContextTarget();
+        };
+    }
+    
+    protected void InstantiateMenu(RectTransform parent, Vector2 screenPos, Camera eventCam) {
+        _menu = Instantiate(contextMenuPrefab, parent);
+        _menu.gameObject.SetActive(true);
+        _menu.SetAsLastSibling();
+        
+        RectTransformUtility.ScreenPointToLocalPointInRectangle(
+            parent, screenPos, eventCam, out var local);
+        _menu.anchoredPosition = local;
+        
+        LayoutRebuilder.ForceRebuildLayoutImmediate(_menu);
+        
+        var size = _menu.rect.size;
+        var pivot = _menu.pivot;
+        var pos = _menu.anchoredPosition;
+        pos.x -= size.x * pivot.x;
+        pos.y += size.y * (1f - pivot.y);
+        _menu.anchoredPosition = pos;
+    }
+    
+    protected void ClampToParent(RectTransform parent, RectTransform menu) {
+        // ... código existente ...
+    }
+    
+    protected void ForwardRightClickToAnyContextTarget() {
+        // ... código existente ...
+    }
+    
+    public void CloseMenu() {
+        if (_menu) Destroy(_menu.gameObject);
+        if (_blocker) Destroy(_blocker);
+        _menu = null; _blocker = null;
+    }
+    
+    protected void OnDisable() => CloseMenu();
+}
+```
+
+**Atualizar UnitListItemContextMenu:**
+```csharp
+public class UnitListItemContextMenu : BaseContextMenu
+{
+    private ReorderableListItem _reorder;
+    private UnitListItemUI _ui;
+    
+    void Awake() {
+        _reorder = GetComponent<ReorderableListItem>();
+        _ui = GetComponent<UnitListItemUI>();
+    }
+    
+    protected override void SetupMenuHandler() {
+        var handler = _menu.GetComponent<UnitContextMenuHandler>();
+        if (handler == null) { CloseMenu(); return; }
+        
+        Transform target = _ui != null && _ui.Unit != null 
+            ? _ui.Unit.transform 
+            : transform;
+        
+        handler.Setup(this, target);
+    }
+}
+```
+
+**Benefícios:**
+- ✅ Elimina duplicação de código
+- ✅ Facilita criação de novos context menus
+- ✅ Código mais testável e manutenível
+
+---
+
+### 10.5 ResourceManager (TOP HUD) ⭐ **PRIORIDADE 2**
+
+**Problema:**
+- Não há agregador de recursos para o TOP HUD
+- ResourceDisplayUI teria que manter estado interno (acoplamento)
+
+**Solução:**
+
+**Criar ResourceManager.cs:**
+```csharp
+public class ResourceManager : MonoBehaviour
+{
+    private static ResourceManager _instance;
+    public static ResourceManager Instance => _instance;
+    
+    private Dictionary<FactionId, Dictionary<ResourceType, int>> _resources = new();
+    
+    void Awake() {
+        if (_instance != null && _instance != this) {
+            Destroy(gameObject);
+            return;
+        }
+        _instance = this;
+        DontDestroyOnLoad(gameObject);
+    }
+    
+    void OnEnable() {
+        GameEvents.OnResourceGathered += HandleResourceGathered;
+    }
+    
+    void OnDisable() {
+        GameEvents.OnResourceGathered -= HandleResourceGathered;
+    }
+    
+    void HandleResourceGathered(FactionId faction, ResourceType type, int amount) {
+        if (!_resources.ContainsKey(faction)) {
+            _resources[faction] = new Dictionary<ResourceType, int>();
+        }
+        if (!_resources[faction].ContainsKey(type)) {
+            _resources[faction][type] = 0;
+        }
+        
+        _resources[faction][type] += amount;
+        
+        // Disparar evento para UI
+        GameEvents.RaiseResourceAmountChanged(faction, type, _resources[faction][type]);
+    }
+    
+    public int GetResource(FactionId faction, ResourceType type) {
+        if (!_resources.ContainsKey(faction)) return 0;
+        if (!_resources[faction].ContainsKey(type)) return 0;
+        return _resources[faction][type];
+    }
+    
+    public bool TrySpendResource(FactionId faction, ResourceType type, int amount) {
+        int current = GetResource(faction, type);
+        if (current < amount) return false;
+        
+        _resources[faction][type] -= amount;
+        GameEvents.RaiseResourceAmountChanged(faction, type, _resources[faction][type]);
+        return true;
+    }
+}
+```
+
+**Adicionar ao GameEvents.cs:**
+```csharp
+// ========== RECURSOS ==========
+/// <summary>Disparado quando quantidade de recurso muda</summary>
+public static event Action<FactionId, ResourceType, int> OnResourceAmountChanged;
+
+public static void RaiseResourceAmountChanged(FactionId faction, ResourceType type, int newAmount)
+    => OnResourceAmountChanged?.Invoke(faction, type, newAmount);
+```
+
+**ResourceDisplayUI (TOP HUD) escutaria:**
+```csharp
+void OnEnable() {
+    GameEvents.OnResourceAmountChanged += UpdateResourceDisplay;
+}
+
+void UpdateResourceDisplay(FactionId faction, ResourceType type, int amount) {
+    if (faction != myFaction) return; // Filtrar por facção
+    
+    // Atualizar texto/ícone do recurso
+    var display = resourceDisplays[type];
+    display.text = amount.ToString();
+}
+```
+
+**Benefícios:**
+- ✅ Desacopla TOP HUD de lógica de recursos
+- ✅ Centraliza estado de recursos (single source of truth)
+- ✅ Facilita Save/Load (serializar ResourceManager)
+
+---
+
+### 10.6 UIManager Central ⭐ **PRIORIDADE 3**
+
+**Problema:**
+- Não há controle centralizado de visibilidade de HUDs
+- Difícil esconder LEFT BAR ao abrir Ranking, Settings, etc.
+
+**Solução:**
+
+**Criar UIManager.cs:**
+```csharp
+public class UIManager : MonoBehaviour
+{
+    private static UIManager _instance;
+    public static UIManager Instance => _instance;
+    
+    [Header("HUD Refs")]
+    public UnitListPanel leftBar;
+    public GameObject topHUD;
+    public GameObject buttonHUD;
+    public GameObject minimap;
+    
+    [Header("Panels")]
+    public GameObject rankingPanel;
+    public GameObject settingsPanel;
+    public GameObject diplomacyPanel;
+    
+    void Awake() {
+        if (_instance != null && _instance != this) {
+            Destroy(gameObject);
+            return;
+        }
+        _instance = this;
+    }
+    
+    public void ShowRankingPanel() {
+        HideAllHUDs();
+        rankingPanel.SetActive(true);
+    }
+    
+    public void HideRankingPanel() {
+        rankingPanel.SetActive(false);
+        ShowAllHUDs();
+    }
+    
+    void HideAllHUDs() {
+        if (leftBar) leftBar.gameObject.SetActive(false);
+        if (topHUD) topHUD.SetActive(false);
+        if (buttonHUD) buttonHUD.SetActive(false);
+        // Minimap sempre visível
+    }
+    
+    void ShowAllHUDs() {
+        if (leftBar) leftBar.gameObject.SetActive(true);
+        if (topHUD) topHUD.SetActive(true);
+        if (buttonHUD) buttonHUD.SetActive(true);
+    }
+    
+    // Orquestração de transições, animações, etc.
+}
+```
+
+**Benefícios:**
+- ✅ Controle centralizado de visibilidade
+- ✅ Facilita transições entre estados de UI
+- ✅ Evita referências cruzadas entre HUDs
+
+---
+
+### 10.7 Persistência Completa ⭐ **PRIORIDADE 3**
+
+**Problema:**
+- Apenas altura de grupos é persistida via PlayerPrefs
+- Composição, ordem e hotkeys não são salvos
+
+**Solução:**
+
+**Criar SaveData:**
+```csharp
+[System.Serializable]
+public class GroupSaveData
+{
+    public string id;
+    public string name;
+    public bool isExpanded;
+    public float preferredHeight;
+    public int? hotkeyIndex;
+    public List<string> unitIds; // Usar GUID ou ScriptableObject ID
+}
+
+[System.Serializable]
+public class UnitListSaveData
+{
+    public List<GroupSaveData> groups = new();
+    public List<string> rootUnitIds = new(); // Units soltas na raiz
+    public List<int> orderIndices = new();   // Índices de ordenação
+}
+```
+
+**Integrar com SaveLoadSystem:**
+```csharp
+public class SaveLoadSystem : MonoBehaviour
+{
+    public void SaveUnitList(UnitListPanel panel) {
+        var saveData = new UnitListSaveData();
+        
+        foreach (var wrapper in panel._order) {
+            if (wrapper.IsGroup) {
+                var group = (UnitGroup)wrapper.Model;
+                var groupData = new GroupSaveData {
+                    id = group.ID,
+                    name = group.GroupName,
+                    isExpanded = group.IsExpanded,
+                    preferredHeight = group.PreferredHeight,
+                    hotkeyIndex = null, // TODO: Get from HotkeyManager
+                    unitIds = group.Units.Select(u => u.GetInstanceID().ToString()).ToList()
+                };
+                saveData.groups.Add(groupData);
+            } else {
+                var unit = wrapper.GetUnit();
+                saveData.rootUnitIds.Add(unit.GetInstanceID().ToString());
+            }
+        }
+        
+        string json = JsonUtility.ToJson(saveData, true);
+        PlayerPrefs.SetString("UnitListSave", json);
+        PlayerPrefs.Save();
+    }
+    
+    public void LoadUnitList(UnitListPanel panel) {
+        // TODO: Implementar
+    }
+}
+```
+
+**Benefícios:**
+- ✅ Grupos persistem entre sessões
+- ✅ Ordem customizada é mantida
+- ✅ Hotkeys vinculados são restaurados
+
+---
+
+## 11) CHECKLIST DE IMPLEMENTAÇÃO
+
+### Setup Inicial
+- [x] Criar `IListItemModel.cs` (interface)
+- [x] Criar `ListItemWrapper.cs` + `ListItemMarker.cs` (adapters)
+- [x] Criar `UnitListPanel.cs` (controller)
+- [x] Criar `ReorderableListItem.cs` (drag-and-drop)
+- [x] Criar `UnitListItemUI.cs` + `UnitListItemHandle.cs` (visual)
+- [x] Criar `UnitGroup.cs` (modelo)
+- [x] Criar `GroupListItemUI.cs` + `GroupDropZone.cs` (visual de grupo)
+- [x] Criar `ResizeGripHandler.cs` (resize)
+- [x] Criar `CreateGroupUI.cs` (criação de grupos)
+- [x] Criar context menus (Unit e Group)
+
+### Integração com Cena
+- [ ] Criar prefabs de `UnitListItemUI` e `GroupListItemUI`
+- [ ] Criar ScrollView com `content` para lista
+- [ ] Criar `DragRoot` fora do ScrollView
+- [ ] Atribuir prefabs em `UnitListPanel`
+- [ ] Configurar `PlayerController.myFaction`
+- [ ] Testar inicialização da lista
+
+### Refatoração (Prioridade 1)
+- [ ] Adicionar eventos de grupos ao `GameEvents.cs`
+- [ ] Implementar `HandleUnitSpawned` / `HandleUnitDespawned`
+- [ ] Criar método `CreateNewGroupAndPopulate()`
+- [ ] Disparar eventos em `CreateNewGroup()` e `DeleteGroupAndRestoreUnits()`
+
+### Refatoração (Prioridade 2)
+- [ ] Implementar object pooling
+- [ ] Criar `BaseContextMenu` e refatorar menus existentes
+- [ ] Criar `ResourceManager` para TOP HUD
+- [ ] Adicionar `OnResourceAmountChanged` ao `GameEvents.cs`
+
+### Refatoração (Prioridade 3)
+- [ ] Criar `UIManager` central
+- [ ] Implementar persistência completa de grupos
+- [ ] Integrar com `SaveLoadSystem`
+
+### Testes
+- [ ] Testar seleção simples/Ctrl/Shift/double
+- [ ] Testar drag-and-drop de units
+- [ ] Testar criação e deleção de grupos
+- [ ] Testar expansão/colapso de grupos
+- [ ] Testar resize de grupos
+- [ ] Testar context menus (Follow, Rename, Delete)
+- [ ] Testar sincronização com SelectionManager
+- [ ] Testar performance com 100+ units
+
+---
+
+## 12) GLOSSÁRIO
+
+### Termos Técnicos
+
+| Termo | Descrição |
+|-------|-----------|
+| **LEFT BAR** | Painel lateral esquerdo contendo lista de unidades e grupos |
+| **UnitListPanel** | Controlador principal (MVC) da lista de unidades |
+| **ListItemWrapper** | Adapter que unifica Unit e UnitGroup sob interface comum |
+| **ListItemMarker** | Componente que liga GameObject visual ao wrapper lógico |
+| **_order** | Lista canônica de itens (lógica) no UnitListPanel |
+| **Drag-and-Drop** | Sistema de reordenação manual de itens arrastando |
+| **Ghost** | Cópia visual do item durante drag (segue o mouse) |
+| **Placeholder** | Item transparente que mantém posição durante drag |
+| **UnitGroup** | Container de unidades (modelo de dados) |
+| **GroupDropZone** | Área de drop para aninhar units em grupos |
+| **Context Menu** | Menu de clique-direito com ações específicas |
+| **Resize Grip** | Handle visual para redimensionar grupos |
+| **Auto-Scroll** | Scroll automático quando cursor aproxima da borda |
+| **Pooling** | Reutilização de GameObjects para evitar Instantiate/Destroy |
+| **Anchor (âncora)** | Ponto inicial de range selection (Shift) |
+
+---
+
+## 13) REFERÊNCIAS E RECURSOS
+
+### Documentação Relacionada
+- **Lote 1:** Variáveis Globais & GameEvents (eventos centralizados)
+- **Lote 2:** Sistema de Câmeras (Follow action do context menu)
+- **Lote 3:** Sistema de Unidades (Unit, UnitDefinition, UnitRegistry)
+- **Lote 4:** Sistema de Seleção (SelectionManager, sincronização)
+
+### Padrões de Design Utilizados
+- **MVC Pattern**: `UnitListPanel` (Controller), `UnitListItemUI` (View), `Unit/UnitGroup` (Model)
+- **Adapter Pattern**: `ListItemWrapper` unifica Unit e UnitGroup
+- **Observer Pattern**: `GameEvents` para comunicação desacoplada
+- **Object Pool Pattern**: (Sugerido para refatoração)
+
+---
+
+## 14) DIAGRAMA DE FLUXOS
+
+### Fluxo de Seleção (Clique na Lista)
+
+```
+1. Usuário clica em UnitListItemUI
+   ↓
+2. UnitListItemHandle.OnPointerClick()
+   ├─ Verifica supressão pós-drag (frameCount)
+   ├─ Detecta Ctrl/Shift/Double
+   └─ Chama panel.OnItemClicked(unit, ctrl, shift, isDouble)
+   ↓
+3. UnitListPanel.OnItemClicked()
+   ├─ Double: Seleciona mesmo tipo
+   ├─ Shift: Range selection (âncora → item)
+   ├─ Ctrl: Toggle
+   └─ Simples: SelectExactly
+   ↓
+4. SelectionManager.SelectExactly/Toggle/etc.
+   ├─ Atualiza lista interna (_selected)
+   └─ Dispara GameEvents.RaiseSelectionChanged()
+   ↓
+5. UnitListPanel.RefreshFromSelection()
+   ├─ Percorre todos os itens visuais
+   ├─ Chama item.SetSelected(true/false)
+   └─ Atualiza outline visual
+```
+
+### Fluxo de Drag-and-Drop
+
+```
+1. OnBeginDrag (ReorderableListItem)
+   ├─ Cria ghost (cópia visual) no DragRoot
+   ├─ Cria placeholder (transparente) no content
+   └─ Reduz alpha do item original
+   ↓
+2. OnDrag (loop)
+   ├─ Move ghost seguindo mouse
+   ├─ Calcula índice de inserção (CalculateInsertionIndex)
+   └─ Reordena placeholder (SetSiblingIndex)
+   ↓
+3. OnEndDrag
+   ├─ Detecta GroupDropZone (drop em grupo?)
+   ├─ Restaura visuais (destroi ghost/placeholder)
+   ├─ Chama panel.CommitDragOperation(wrapper, dropZone)
+   └─ Suprime próximo clique (handle.IgnoreNextClickOnce)
+   ↓
+4. CommitDragOperation (UnitListPanel)
+   ├─ Se dropZone: Move unit para group.Units
+   ├─ Se raiz: Reconstrói _order via sibling index
+   └─ Chama Build() para atualizar visual
+```
+
+### Fluxo de Criação de Grupo
+
+```
+1. Usuário digita nome e clica "Create Group"
+   ↓
+2. CreateGroupUI.CreateGroup()
+   └─ Chama panel.CreateNewGroup(desiredName)
+   ↓
+3. UnitListPanel.CreateNewGroup()
+   ├─ Cria novo UnitGroup { GroupName = ..., IsExpanded = true }
+   ├─ Adiciona ListItemWrapper(group) à _order
+   ├─ Chama Build() para reconstruir visual
+   └─ Dispara GameEvents.RaiseGroupCreated(group)
+   ↓
+4. Button HUD escuta OnGroupCreated
+   └─ Adiciona botão de hotkey (1-9) para o grupo
+```
+
+---
+
+## CONCLUSÃO
+
+O **LEFT BAR** é um módulo complexo e feature-rich que gerencia a lista visual de unidades e grupos no RTS. 
+
+### Status de Implementação
+
+| Componente | Status | Notas |
+|------------|--------|-------|
+| Lista de Unidades | ✅ Completo | Visual, seleção, eventos |
+| Drag-and-Drop | ✅ Completo | Reordenação manual funcional |
+| Grupos | ✅ Completo | Criação, expansão, aninhamento |
+| Resize de Grupos | ✅ Completo | Grip com auto-scroll |
+| Context Menus | ✅ Completo | Unit (Follow), Group (Rename/Delete) |
+| Sincronização com Selection | ✅ Completo | Bidirecional via GameEvents |
+| **Eventos de Grupos** | ❌ **Faltando** | Crítico para Button HUD |
+| **Sincronização Spawn/Despawn** | ❌ **Faltando** | Lista não atualiza em runtime |
+| **Object Pooling** | ❌ **Faltando** | Performance ruim com muitas units |
+
+### Próximos Passos Recomendados
+
+1. **Prioridade 1:** Implementar eventos de grupos (Seção 10.1)
+2. **Prioridade 1:** Implementar sincronização com spawn/despawn (Seção 10.2)
+3. **Prioridade 2:** Implementar object pooling (Seção 10.3)
+4. **Prioridade 2:** Criar BaseContextMenu (Seção 10.4)
+5. **Prioridade 2:** Criar ResourceManager (Seção 10.5)
+6. **Prioridade 3:** Criar UIManager (Seção 10.6)
+7. **Prioridade 3:** Implementar persistência completa (Seção 10.7)
+
+---
+
+**Documento mantido por:** Equipe de Desenvolvimento  
+**Última atualização:** Outubro 2025  
+**Versão:** 1.0 (Inicial)
+
+---
+
