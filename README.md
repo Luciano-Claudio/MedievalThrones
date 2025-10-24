@@ -2176,7 +2176,7 @@ O **Lote 1 - Variáveis Globais & Módulo Factions** estabelece a **fundação a
 
 # LOTE 2 — CÂMERA SYSTEM RTS (CINEMACHINE V3)
 
-**Versão:** 1.0  
+**Versão:** 3.0  
 **Status:** ✅ Implementado e Documentado  
 **Data:** Outubro 2025
 
@@ -5008,7 +5008,7 @@ O **Lote 2 - Câmera System RTS** estabelece um **sistema de câmera profissiona
 
 # LOTE 3 — MÓDULO UNIT (SISTEMA DE UNIDADES)
 
-**Versão:** 1.0  
+**Versão:** 3.0  
 **Status:** ✅ Refatorado e Documentado  
 **Data:** Outubro 2025
 
@@ -7663,26 +7663,31 @@ O **Lote 3 - Módulo Unit** estabelece o **sistema completo de unidades** para M
 
 ---
 
-## LOTE 4 — MÓDULO SELECTION - SISTEMA DE SELEÇÃO DE UNIDADES
+# LOTE 4 — SELECTION SYSTEM (SISTEMA DE SELEÇÃO)
 
-**Versão:** 2.0 (Atualizada - Outubro 2025)  
-**Status:** ✅ Implementado e Funcional | ⚠️ Pendente Refatoração (GameEvents)
+**Versão:** 3.0  
+**Status:** ✅ Refatorado e Documentado  
+**Data:** Outubro 2025
 
 ---
 
 ## 📋 ÍNDICE
 
 1. [Visão Geral do Módulo](#1-visão-geral-do-módulo)
-2. [Estrutura e Relacionamentos das Classes](#2-estrutura-e-relacionamentos-das-classes)
-3. [Referência de API (Membros Públicos)](#3-referência-de-api-membros-públicos)
-4. [Eventos Chave](#4-eventos-chave)
-5. [Configuração e Setup](#5-configuração-e-setup)
-6. [Casos de Uso Práticos](#6-casos-de-uso-práticos)
-7. [Integração com UI](#7-integração-com-ui)
-8. [Troubleshooting](#8-troubleshooting)
-9. [Sugestões de Refatoração](#9-sugestões-de-refatoração)
-10. [Glossário](#10-glossário)
-11. [Estrutura de Arquivos](#11-estrutura-de-arquivos)
+2. [SelectionManager - Gerenciador Principal](#2-selectionmanager---gerenciador-principal)
+3. [InputSelection - Interface de Input](#3-inputselection---interface-de-input)
+4. [WorldPicker - Raycasting](#4-worldpicker---raycasting)
+5. [DragRectRenderer - Visual de Arrasto](#5-dragrectrenderer---visual-de-arrasto)
+6. [UnitHitProxy - Proxy de Colisão](#6-unithitproxy---proxy-de-colisão)
+7. [Fluxo de Seleção Completo](#7-fluxo-de-seleção-completo)
+8. [Integração com Outros Módulos](#8-integração-com-outros-módulos)
+9. [Configuração na Cena](#9-configuração-na-cena)
+10. [Exemplos de Uso Avançados](#10-exemplos-de-uso-avançados)
+11. [Troubleshooting e FAQ](#11-troubleshooting-e-faq)
+12. [Tabela de Relacionamentos Completa](#12-tabela-de-relacionamentos-completa)
+13. [Changelog e Migrações](#13-changelog-e-migrações)
+14. [Referências Rápidas](#14-referências-rápidas)
+15. [Conclusão](#15-conclusão)
 
 ---
 
@@ -7690,328 +7695,1546 @@ O **Lote 3 - Módulo Unit** estabelece o **sistema completo de unidades** para M
 
 ### 1.1 Objetivo
 
-Fornecer um **sistema completo e robusto de seleção de unidades** para RTS, permitindo ao jogador:
-- ✅ Clicar para selecionar unidades individuais
-- ✅ Arrastar (drag) para seleção de múltiplas unidades (box selection)
-- ✅ Duplo-clique para selecionar todas unidades do mesmo tipo visíveis na tela
-- ✅ Modificadores (Ctrl) para seleção aditiva/toggle
-- ✅ Proteção contra seleção acidental ao clicar em UI
-- ✅ Feedback visual de seleção (highlight nas unidades + retângulo de drag)
+Fornecer um **sistema completo de seleção de unidades** para Medieval Thrones, com suporte a:
+- ✅ Clique simples (selecionar unidade)
+- ✅ Clique com Ctrl (adicionar/remover à seleção)
+- ✅ Drag rect (seleção em área)
+- ✅ Duplo clique (selecionar todas do mesmo tipo)
+- ✅ Clique no chão (limpar seleção)
+- ✅ Filtro por facção (apenas unidades próprias)
+- ✅ Detecção de UI (ignora cliques sobre UI)
 
 ### 1.2 Responsabilidades Principais
 
-O Módulo Selection é responsável por:
+O **Lote 4 - Selection System** é responsável por:
 
 1. **Captura de Input** (`InputSelection`):
-   - Ler ações do Unity Input System (cliques, posição do mouse, modificadores)
-   - Detectar padrões complexos (drag, double-click)
-   - Filtrar input sobre UI (não selecionar se clicar em botões)
+   - Detecção de cliques (LMB/RMB)
+   - Detecção de drag (threshold configurável)
+   - Detecção de duplo clique (janela temporal)
+   - Detecção de modificadores (Ctrl, Shift)
+   - Ignorar input sobre UI (EventSystem)
 
-2. **Raycasting no Mundo** (`WorldPicker`):
-   - Converter posição de tela em unidades/terreno no mundo 3D
-   - Usar LayerMasks para otimização e precisão
+2. **Gerenciamento de Seleção** (`SelectionManager`):
+   - Manter conjunto de unidades selecionadas (HashSet)
+   - Operações: Add, Remove, Toggle, Clear
+   - Filtros (apenas facção própria)
+   - Seleção por retângulo (drag)
+   - Seleção por tipo (duplo clique)
+   - Emissão de evento `OnSelectionChanged`
 
-3. **Gerenciamento de Estado** (`SelectionManager`):
-   - Manter HashSet de unidades selecionadas
-   - Aplicar regras de seleção (filtro por facção, modificadores)
-   - Disparar eventos quando seleção muda
+3. **Raycasting** (`WorldPicker`):
+   - Detectar unidades sob o cursor
+   - Detectar terreno sob o cursor
+   - LayerMasks configuráveis
 
-4. **Feedback Visual**:
-   - `Unit.selectionHighlight` ativado/desativado automaticamente
-   - `DragRectRenderer` desenha retângulo amarelo durante drag
+4. **Feedback Visual** (`DragRectRenderer`):
+   - Renderizar retângulo de seleção em 3D
+   - Atualização em tempo real
 
-5. **Suporte a Hierarquias Complexas** (`UnitHitProxy`):
-   - Facilitar raycasting em prefabs com múltiplos colliders
+5. **Proxy de Colisão** (`UnitHitProxy`):
+   - Facilitar detecção de unidades em hierarquias complexas
 
-### 1.3 Arquitetura do Sistema
+### 1.3 Arquitetura do Sistema de Seleção
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    UNITY INPUT SYSTEM                        │
-│          (Mouse/Keyboard → InputActionAsset)                 │
-└────────────────────┬────────────────────────────────────────┘
-                     │
-                     ▼
-         ┌───────────────────────┐
-         │   InputSelection      │  ← Captura input bruto
-         │   (MonoBehaviour)     │     Detecta padrões (drag, double-click)
-         └───────┬───────────────┘     Filtra UI (EventSystem)
-                 │
-                 │ Eventos:
-                 │ • OnClickUnit
-                 │ • OnClickGround
-                 │ • OnBeginDrag / OnEndDrag
-                 │ • OnDoubleClickUnit
-                 ▼
-         ┌───────────────────────┐
-         │   WorldPicker         │  ← Raycasting 3D
-         │   (MonoBehaviour)     │     Converte tela → mundo
-         └───────┬───────────────┘     Usa LayerMasks
-                 │
-                 │ Unit? ou Vector3
-                 ▼
-         ┌───────────────────────┐
-         │  SelectionManager     │  ← Lógica de seleção
-         │  (MonoBehaviour)      │     Regras (facção, modificadores)
-         └───────┬───────────────┘     HashSet<Unit>
-                 │
-                 │ FireChanged()
-                 ▼
-         ┌───────────────────────┐
-         │ OnSelectionChanged    │  ← Evento LOCAL (atual)
-         │   (Action<IReadOnly   │     ⚠️ REFATORAR para GameEvents
-         │    Collection<Unit>>) │
-         └───────┬───────────────┘
-                 │
-                 ├──────────────┬──────────────┬──────────────┐
-                 ▼              ▼              ▼              ▼
-            [UI Panel]    [Minimap]      [Audio]    [Sistemas Futuros]
+│              LOTE 4 - SELECTION SYSTEM                      │
+└─────────────────────────────────────────────────────────────┘
+                            │
+        ┌───────────────────┼───────────────────┬───────────────┐
+        │                   │                   │               │
+        ▼                   ▼                   ▼               ▼
+┌────────────────┐  ┌────────────────┐  ┌──────────────┐  ┌──────────────┐
+│ InputSelection │  │SelectionManager│  │ WorldPicker  │  │DragRectRender│
+│ (MonoBehaviour)│  │(MonoBehaviour) │  │(MonoBehaviour│  │(MonoBehaviour│
+├────────────────┤  ├────────────────┤  ├──────────────┤  ├──────────────┤
+│• InputActions  │  │• HashSet<Unit> │  │• TryPickUnit │  │• quadPrefab  │
+│• dragThreshold │  │• player        │  │• TryPickGrnd │  │• BeginRect() │
+│• doubleClickWin│  │• onlyOwnUnits  │  │• unitMask    │  │• UpdateRect()│
+│• IsCtrlPressed │  │• HandleClick   │  │• groundMask  │  │• EndRect()   │
+│• IsShiftPressed│  │• HandleDrag    │  │              │  │              │
+│                │  │• HandleDouble  │  │              │  │              │
+│                │  │• Add/Remove    │  │              │  │              │
+│                │  │• FireChanged() │  │              │  │              │
+└────────┬───────┘  └────────┬───────┘  └──────────────┘  └──────────────┘
+         │                   │                                     │
+         │  Detecta Input    │  Gerencia Seleção                  │  Visual
+         │  ↓                │  ↓                                  │  ↓
+         └───────────────────┼─────────────────────────────────────┘
+                             │
+                             │ Dispara Eventos
+                             ▼
+                     ┌───────────────┐
+                     │  GameEvents   │ ← Lote 1
+                     │  (Lote 1)     │
+                     ├───────────────┤
+                     │ INPUT:        │
+                     │• OnPointerDown│
+                     │• OnPointerUp  │
+                     │• OnDragBegin  │
+                     │• OnDragging   │
+                     │• OnDragEnd    │
+                     │• OnUnitClick  │
+                     │• OnGroundClick│
+                     │• OnUnitDouble │
+                     │               │
+                     │ SELEÇÃO:      │
+                     │• OnSelection  │
+                     │  Changed      │
+                     └───────┬───────┘
+                             │
+                     ┌───────┴────────┐
+                     │                │
+                     ▼                ▼
+             ┌───────────────┐  ┌──────────┐
+             │     Unit      │  │    UI    │
+             │ (Lote 3)      │  │ Systems  │
+             │• SetSelected()│  │• UnitList│
+             └───────────────┘  └──────────┘
 ```
 
-**Fluxo de Seleção (Clique Simples):**
-1. Jogador clica com LMB
-2. `InputSelection` detecta clique (não é drag, não está sobre UI)
-3. `InputSelection` chama `WorldPicker.TryPickUnitAt(screenPos)`
-4. `WorldPicker` faz raycast na Layer "Unit"
-5. Acerta `SphereCollider` (trigger) do `UnitHitProxy`
-6. `UnitHitProxy` retorna referência ao componente `Unit`
-7. `InputSelection` dispara evento `OnClickUnit(unit, ctrl)`
-8. `SelectionManager` escuta e processa (Add/Toggle/Replace)
-9. `SelectionManager.FireChanged()` → `OnSelectionChanged` → UI atualiza
+**Fluxo de Dados Típico:**
 
-### 1.4 Integração com Outros Módulos
-
-| Módulo | Relação | Uso |
-|--------|---------|-----|
-| **Unit** (Lote 3) | ✅ Dependência Direta | `Unit.SetSelected(bool)`, `Unit.owner`, `Unit.def` |
-| **UnitRegistry** (Lote 3) | ✅ Dependência Direta | `GetByFaction()` para double-click e drag |
-| **PlayerController** (Lote 1) | ✅ Dependência Direta | `myFaction` para filtro "only own units" |
-| **GameEvents** (Lote 1) | ⚠️ **Não usado ainda** | **REFATORAÇÃO PENDENTE:** `OnSelectionChanged` deve migrar |
-| **UI System** | ✅ Consumer | `UnitListItemUI` escuta `OnSelectionChanged` |
-| **Comandos** (Futuro) | 🔜 Consumer | Usará `SelectionManager.Selection` para mover/atacar |
+```
+Jogador clica em unidade
+       │
+       ▼
+InputSelection detecta clique
+       │
+       │ GameEvents.RaiseUnitClick(unit, ctrl)
+       ▼
+SelectionManager.HandleClickUnit()
+       │
+       ├──▶ Add(unit) → unit.SetSelected(true)
+       │
+       │ GameEvents.RaiseSelectionChanged(_selection)
+       ▼
+UI Systems escutam e atualizam interface
+```
 
 ---
 
-## 2) ESTRUTURA E RELACIONAMENTOS DAS CLASSES
+## 2) SELECTIONMANAGER - GERENCIADOR PRINCIPAL
 
-### 2.1 Diagrama de Classes
-
-```
-┌──────────────────────────────────────────────────────────────┐
-│                        INPUT LAYER                            │
-├──────────────────────────────────────────────────────────────┤
-│  InputSelection                                               │
-│  ├─ InputActionReference point, lmb, rmb, ctrl, shift       │
-│  ├─ WorldPicker picker                                       │
-│  ├─ event Action<Unit, bool> OnClickUnit                     │
-│  ├─ event Action<Unit> OnDoubleClickUnit                     │
-│  ├─ event Action<Vector3, bool> OnClickGround                │
-│  ├─ event Action<Vector2> OnBeginDrag/OnEndDrag              │
-│  └─ bool IsCtrlPressed, IsShiftPressed                       │
-└──────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌──────────────────────────────────────────────────────────────┐
-│                      RAYCASTING LAYER                         │
-├──────────────────────────────────────────────────────────────┤
-│  WorldPicker                                                  │
-│  ├─ Camera cam                                                │
-│  ├─ LayerMask unitMask, groundMask                           │
-│  ├─ bool TryPickUnitAt(Vector2, out Unit)                    │
-│  └─ bool TryPickGroundAt(Vector2, out Vector3, out Vector3)  │
-└──────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌──────────────────────────────────────────────────────────────┐
-│                    SELECTION LOGIC LAYER                      │
-├──────────────────────────────────────────────────────────────┤
-│  SelectionManager                                             │
-│  ├─ HashSet<Unit> _selection                                 │
-│  ├─ PlayerController player                                  │
-│  ├─ bool onlyOwnUnits                                        │
-│  ├─ IReadOnlyCollection<Unit> Selection { get; }             │
-│  ├─ event Action<IReadOnlyCollection<Unit>> OnSelectionChanged│
-│  ├─ void HandleClickUnit(Unit, bool ctrl)                    │
-│  ├─ void HandleEndDrag(Vector2)                              │
-│  ├─ void HandleDoubleClickUnit(Unit)                         │
-│  └─ void SelectByWorldRect(Vector3 a, Vector3 b, bool add)   │
-└──────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌──────────────────────────────────────────────────────────────┐
-│                      VISUAL FEEDBACK LAYER                    │
-├──────────────────────────────────────────────────────────────┤
-│  DragRectRenderer                                             │
-│  ├─ GameObject quadPrefab                                     │
-│  └─ Instancia/atualiza/destrói quad amarelo durante drag     │
-│                                                               │
-│  UnitHitProxy                                                 │
-│  ├─ Unit unit                                                 │
-│  └─ Facilita GetComponentInParent<Unit>() em raycasts        │
-└──────────────────────────────────────────────────────────────┘
-```
-
-### 2.2 Tabela de Componentes
-
-| Classe | Tipo | Responsabilidade | Arquivo |
-|--------|------|------------------|---------|
-| `InputSelection` | MonoBehaviour | Captura input do Unity Input System e traduz em eventos de gameplay | `InputSelection.cs` |
-| `WorldPicker` | MonoBehaviour | Raycasting para detectar unidades e terreno | `WorldPicker.cs` |
-| `SelectionManager` | MonoBehaviour | Gerencia estado de seleção (HashSet) e aplica regras | `SelectionManager.cs` |
-| `UnitHitProxy` | MonoBehaviour | Proxy para facilitar raycasting em hierarquias complexas | `UnitHitProxy.cs` |
-| `DragRectRenderer` | MonoBehaviour | Feedback visual do retângulo de seleção | `DragRectRenderer.cs` |
-| `SelectionDebugListener` | MonoBehaviour | Debug (comentado, não em produção) | `SelectionDebugListener.cs` |
-
----
-
-## 3) REFERÊNCIA DE API (MEMBROS PÚBLICOS)
-
-### 3.1 InputSelection
+### 2.1 Visão Geral
 
 **Tipo:** `MonoBehaviour`  
-**Responsabilidade:** Captura input bruto do Unity Input System e traduz em eventos de alto nível (clique em unidade, double-click, drag).
+**Responsabilidade:** Gerenciar o conjunto de unidades selecionadas e coordenar os handlers de input.
 
-#### **Campos Públicos (Inspector):**
+**Funcionalidades:**
+- ✅ Mantém `HashSet<Unit>` de selecionadas
+- ✅ Operações: Add, Remove, Toggle, Clear
+- ✅ Handlers de eventos de input (via GameEvents)
+- ✅ Filtro por facção (opcional)
+- ✅ Seleção por drag rect
+- ✅ Seleção por duplo clique (mesmo tipo)
+- ✅ API pública para seleção programática
+
+### 2.2 Campos Públicos (Inspector)
+
+#### **Screenshot de Referência:**
+```
+┌─────────────────────────────────────────────────────┐
+│ SelectionManager (Script)                           │
+├─────────────────────────────────────────────────────┤
+│ Selection                                           │
+│   Rect Inflate Px: 1.5                              │
+│                                                     │
+│ Refs                                                │
+│   Player: PlayerSettings (Player Controller)       │
+│   Cam: Main Camera (Camera)                        │
+│   Input: Selection (Input Selection)               │
+│                                                     │
+│ Filtro                                              │
+│   Only Own Units: ☑                                 │
+└─────────────────────────────────────────────────────┘
+```
+
+---
+
+#### **Seção: Selection**
+
+```csharp
+[Header("Selection")]
+[Tooltip("Px extras no retângulo para evitar perda por borda")]
+public float rectInflatePx = 1.5f;
+```
+
+**rectInflatePx (float):**
+- **Descrição:** Pixels extras adicionados ao retângulo de seleção para evitar perda de unidades nas bordas
+- **Padrão:** 1.5
+- **Uso:** Compensa imprecisão visual/física
+- **Exemplo:** Se drag rect é 100x100px, área real testada é 103x103px
+
+---
+
+#### **Seção: Refs**
 
 ```csharp
 [Header("Refs")]
-public WorldPicker picker; // Referência ao raycaster
-
-[Header("Config")]
-public float dragThresholdPx = 6f;      // Distância mínima para considerar drag (pixels)
-public float doubleClickWindow = 0.28f; // Janela de tempo para double-click (segundos)
-
-[Header("Actions (arraste do seu asset)")]
-public InputActionReference point;  // Vector2 - Posição do mouse
-public InputActionReference lmb;    // Button - Left Mouse Button
-public InputActionReference rmb;    // Button - Right Mouse Button
-public InputActionReference ctrl;   // Button - Ctrl key
-public InputActionReference shift;  // Button - Shift key
+public PlayerController player;   // define a facção local (Player1, etc.)
+public Camera cam;                // mesma câmera usada no WorldPicker
+public InputSelection input;      // nosso input separado
 ```
 
-#### **Propriedades Públicas:**
+**player (PlayerController):**
+- **Descrição:** Referência ao `PlayerController` (Lote 1)
+- **Uso:** Obter `myFaction` para filtrar unidades próprias
+- **Obrigatório:** Sim (se `onlyOwnUnits = true`)
+
+**cam (Camera):**
+- **Descrição:** Câmera usada para raycasting e projeções
+- **Padrão:** `Camera.main` (via `Reset()`)
+- **Uso:** Converter screen → world coordinates
+
+**input (InputSelection):**
+- **Descrição:** Referência ao componente `InputSelection`
+- **Uso:** Acessar `IsCtrlPressed` durante drag end
+- **Nota:** Input events vêm via GameEvents, não diretamente do input
+
+---
+
+#### **Seção: Filtro**
 
 ```csharp
-/// <summary>
-/// Verifica se Ctrl está pressionado no momento.
-/// </summary>
-public bool IsCtrlPressed { get; }
-
-/// <summary>
-/// Verifica se Shift está pressionado no momento.
-/// </summary>
-public bool IsShiftPressed { get; }
+[Header("Filtro")]
+public bool onlyOwnUnits = true;  // nunca selecionar unidades de outra facção
 ```
 
-#### **Eventos:**
+**onlyOwnUnits (bool):**
+- **Descrição:** Se `true`, apenas unidades da facção do player podem ser selecionadas
+- **Padrão:** `true`
+- **Uso:** RTS típico (não pode selecionar inimigos)
+- **Se `false`:** Permite selecionar qualquer unidade (útil para editor/debug)
+
+---
+
+### 2.3 Propriedades (Read-Only)
+
+#### **Selection (IReadOnlyCollection<Unit>)**
 
 ```csharp
-// ===== INPUT BRUTO =====
-/// <summary>Disparado quando LMB é pressionado (down)</summary>
-public event Action<Vector2> OnPointerDown;
-
-/// <summary>Disparado quando LMB é solto (up)</summary>
-public event Action<Vector2> OnPointerUp;
-
-// ===== DRAG =====
-/// <summary>Disparado quando drag inicia (após ultrapassar threshold)</summary>
-public event Action<Vector2> OnBeginDrag;
-
-/// <summary>Disparado continuamente durante o drag</summary>
-public event Action<Vector2> OnDragging;
-
-/// <summary>Disparado quando drag termina (LMB up após drag)</summary>
-public event Action<Vector2> OnEndDrag;
-
-// ===== CLIQUES INTERPRETADOS =====
-/// <summary>
-/// Disparado quando jogador clica em uma unidade.
-/// </summary>
-/// <param name="unit">Unidade clicada</param>
-/// <param name="ctrl">Se Ctrl estava pressionado</param>
-public event Action<Unit, bool> OnClickUnit;
-
-/// <summary>
-/// Disparado quando jogador duplo-clica em uma unidade.
-/// </summary>
-/// <param name="unit">Unidade duplo-clicada</param>
-public event Action<Unit> OnDoubleClickUnit;
-
-/// <summary>
-/// Disparado quando jogador clica no terreno (ou RMB).
-/// </summary>
-/// <param name="worldPoint">Posição 3D no mundo</param>
-/// <param name="ctrl">Se Ctrl estava pressionado</param>
-public event Action<Vector3, bool> OnClickGround;
+public IReadOnlyCollection<Unit> Selection => _selection;
 ```
 
-#### **Padrões de Uso:**
+**Descrição:** Coleção read-only das unidades selecionadas.
 
+**Uso:**
 ```csharp
-// Sistema de Seleção escuta cliques
-void OnEnable() {
-    input.OnClickUnit += HandleClickUnit;
-    input.OnClickGround += HandleClickGround;
-    input.OnBeginDrag += HandleBeginDrag;
-    input.OnEndDrag += HandleEndDrag;
-    input.OnDoubleClickUnit += HandleDoubleClickUnit;
-}
-
-void OnDisable() {
-    input.OnClickUnit -= HandleClickUnit;
-    input.OnClickGround -= HandleClickGround;
-    input.OnBeginDrag -= HandleBeginDrag;
-    input.OnEndDrag -= HandleEndDrag;
-    input.OnDoubleClickUnit -= HandleDoubleClickUnit;
+foreach (var unit in selectionManager.Selection)
+{
+    Debug.Log($"Selecionada: {unit.DisplayName}");
 }
 ```
 
 ---
 
-### 3.2 WorldPicker
+#### **Count (int)**
+
+```csharp
+public int Count => _selection.Count;
+```
+
+**Descrição:** Número de unidades selecionadas.
+
+**Uso:**
+```csharp
+if (selectionManager.Count == 0)
+{
+    statusText.text = "Nenhuma unidade selecionada";
+}
+else
+{
+    statusText.text = $"{selectionManager.Count} unidade(s) selecionada(s)";
+}
+```
+
+---
+
+### 2.4 Métodos Privados de Seleção
+
+#### **Add(Unit u)**
+
+```csharp
+void Add(Unit u)
+{
+    if (_selection.Add(u)) u.SetSelected(true);
+}
+```
+
+**Descrição:** Adiciona unidade à seleção (se ainda não estiver).
+
+**Comportamento:**
+- Se `_selection.Add()` retorna `true` (unidade não estava), chama `u.SetSelected(true)`
+- Se já estava selecionada, nada acontece (idempotente)
+
+---
+
+#### **Remove(Unit u)**
+
+```csharp
+void Remove(Unit u)
+{
+    if (_selection.Remove(u)) u.SetSelected(false);
+}
+```
+
+**Descrição:** Remove unidade da seleção.
+
+**Comportamento:**
+- Se `_selection.Remove()` retorna `true` (unidade estava), chama `u.SetSelected(false)`
+- Se não estava selecionada, nada acontece (idempotente)
+
+---
+
+#### **Toggle(Unit u)**
+
+```csharp
+void Toggle(Unit u)
+{
+    if (_selection.Contains(u)) Remove(u);
+    else Add(u);
+}
+```
+
+**Descrição:** Inverte estado de seleção da unidade.
+
+**Comportamento:**
+- Se está selecionada → Remove
+- Se não está selecionada → Add
+
+**Uso:** Clique com Ctrl
+
+---
+
+#### **Clear()**
+
+```csharp
+void Clear()
+{
+    if (_selection.Count == 0) return;
+    foreach (var u in _selection) u.SetSelected(false);
+    _selection.Clear();
+}
+```
+
+**Descrição:** Limpa toda a seleção.
+
+**Comportamento:**
+1. Early exit se já vazia
+2. Chama `SetSelected(false)` em todas
+3. Limpa HashSet
+
+---
+
+### 2.5 Handlers de Eventos (Privados)
+
+#### **OnEnable/OnDisable (Lifecycle)**
+
+```csharp
+void OnEnable()
+{
+    // REFATORAÇÃO: Subscrever eventos via GameEvents ao invés de InputSelection
+    GameEvents.OnUnitClick += HandleClickUnit;
+    GameEvents.OnGroundClick += HandleClickGround;
+    GameEvents.OnDragBegin += OnBeginDragHandler;
+    GameEvents.OnDragEnd += HandleEndDrag;
+    GameEvents.OnUnitDoubleClick += HandleDoubleClickUnit;
+}
+
+void OnDisable()
+{
+    // REFATORAÇÃO: Desinscrever eventos via GameEvents
+    GameEvents.OnUnitClick -= HandleClickUnit;
+    GameEvents.OnGroundClick -= HandleClickGround;
+    GameEvents.OnDragBegin -= OnBeginDragHandler;
+    GameEvents.OnDragEnd -= HandleEndDrag;
+    GameEvents.OnUnitDoubleClick -= HandleDoubleClickUnit;
+}
+```
+
+**Eventos Consumidos:**
+
+| Evento | Handler | Descrição |
+|--------|---------|-----------|
+| `OnUnitClick` | `HandleClickUnit` | Clique em unidade |
+| `OnGroundClick` | `HandleClickGround` | Clique no chão |
+| `OnDragBegin` | `OnBeginDragHandler` | Início de drag |
+| `OnDragEnd` | `HandleEndDrag` | Fim de drag |
+| `OnUnitDoubleClick` | `HandleDoubleClickUnit` | Duplo clique em unidade |
+
+---
+
+#### **HandleClickUnit(Unit unit, bool ctrl)**
+
+```csharp
+void HandleClickUnit(Unit unit, bool ctrl)
+{
+    if (onlyOwnUnits && unit.owner != player.myFaction) return;
+
+    if (ctrl) Toggle(unit);
+    else { Clear(); Add(unit); }
+
+    _rangeAnchor = unit;
+    FireChanged();
+}
+```
+
+**Parâmetros:**
+- `unit`: Unidade clicada
+- `ctrl`: Se Ctrl estava pressionado
+
+**Comportamento:**
+
+1. **Filtro de Facção:**
+   - Se `onlyOwnUnits = true` e unidade é de outra facção → retorna (ignora)
+
+2. **Lógica de Seleção:**
+   - **Ctrl pressionado:** Toggle (adiciona ou remove)
+   - **Ctrl não pressionado:** Clear + Add (substitui seleção)
+
+3. **Range Anchor:**
+   - Atualiza `_rangeAnchor` (usado para Shift+Click - futuro)
+
+4. **Notificação:**
+   - Dispara `FireChanged()` → evento `OnSelectionChanged`
+
+**Exemplo:**
+```
+Clique simples em Worker (1):
+  → Clear() → Add(Worker1) → Selection = {Worker1}
+
+Ctrl+Clique em Worker (2):
+  → Toggle(Worker2) → Selection = {Worker1, Worker2}
+
+Ctrl+Clique em Worker (1) novamente:
+  → Toggle(Worker1) → Remove → Selection = {Worker2}
+```
+
+---
+
+#### **HandleClickGround(Vector3 worldPoint, bool ctrl)**
+
+```csharp
+void HandleClickGround(Vector3 worldPoint, bool ctrl)
+{
+    // clique no chão (ou RMB no seu setup): limpa seleção
+    Clear();
+    // opcional: não mexer na áncora; ela permanece até um clique normal substituir
+    FireChanged();
+}
+```
+
+**Parâmetros:**
+- `worldPoint`: Posição 3D do clique no terreno
+- `ctrl`: Se Ctrl estava pressionado (ignorado)
+
+**Comportamento:**
+- Limpa toda a seleção (`Clear()`)
+- **Não limpa `_rangeAnchor`** (opcional, design choice)
+- Dispara `FireChanged()`
+
+**Uso Típico:**
+- Jogador clica no chão → desseleciona tudo
+- RMB no chão → limpa seleção + move unidades (em outro sistema)
+
+---
+
+#### **OnBeginDragHandler(Vector2 startScreenPos)**
+
+```csharp
+void OnBeginDragHandler(Vector2 startScreenPos)
+{
+    if (Physics.Raycast(cam.ScreenPointToRay(startScreenPos), out var hit))
+        _dragStartWorld = hit.point;
+}
+```
+
+**Parâmetro:**
+- `startScreenPos`: Posição de tela onde drag começou
+
+**Comportamento:**
+- Converte screen → world via raycast
+- Armazena `_dragStartWorld` para uso em `HandleEndDrag`
+
+**Nota:** Este handler **não faz seleção**, apenas armazena posição inicial.
+
+---
+
+#### **HandleEndDrag(Vector2 endScreenPos)**
+
+```csharp
+void HandleEndDrag(Vector2 endScreenPos)
+{
+    bool ctrl = input != null && input.IsCtrlPressed;
+
+    Vector3 endWorld;
+    if (Physics.Raycast(cam.ScreenPointToRay(endScreenPos), out var hit))
+        endWorld = hit.point;
+    else
+        endWorld = ProjectScreenToXZ(endScreenPos); // fallback se não colidir com terreno
+
+    SelectByWorldRect(_dragStartWorld, endWorld, additive: ctrl);
+    FireChanged();
+}
+```
+
+**Parâmetro:**
+- `endScreenPos`: Posição de tela onde drag terminou
+
+**Comportamento:**
+
+1. **Detecta Ctrl:**
+   - `ctrl = input.IsCtrlPressed` (via InputSelection)
+
+2. **Converte End Position:**
+   - Raycast para obter `endWorld`
+   - Fallback para `ProjectScreenToXZ` se não colidir
+
+3. **Seleção por Retângulo:**
+   - Chama `SelectByWorldRect(_dragStartWorld, endWorld, additive: ctrl)`
+   - **additive = true:** Não limpa seleção anterior (Ctrl)
+   - **additive = false:** Limpa seleção anterior (normal)
+
+4. **Notificação:**
+   - Dispara `FireChanged()`
+
+**Exemplo:**
+```
+Drag normal (sem Ctrl):
+  → Clear() → Seleciona unidades no retângulo → Selection = {novas}
+
+Drag com Ctrl:
+  → NÃO Clear() → Adiciona unidades no retângulo → Selection = {antigas + novas}
+```
+
+---
+
+#### **HandleDoubleClickUnit(Unit unit)**
+
+```csharp
+void HandleDoubleClickUnit(Unit unit)
+{
+    if (onlyOwnUnits && unit.owner != player.myFaction) return;
+
+    Clear();
+    // "mesmo tipo visível": vou usar UnitDefinition (ou type)
+    var mine = UnitRegistry.GetByFaction(player.myFaction);
+    foreach (var u in mine)
+    {
+        if (!IsOnScreen(u.transform.position)) continue;
+        if (u.def == unit.def) Add(u); // ou comparar u.def.type se preferir
+    }
+    _rangeAnchor = unit;  // duplo clique atualiza âncora
+    FireChanged();
+}
+```
+
+**Parâmetro:**
+- `unit`: Unidade com duplo clique
+
+**Comportamento:**
+
+1. **Filtro de Facção:**
+   - Se `onlyOwnUnits = true` e unidade é de outra facção → retorna
+
+2. **Limpa Seleção:**
+   - `Clear()` (duplo clique substitui seleção)
+
+3. **Seleciona Todas do Mesmo Tipo:**
+   - Obtém todas as unidades da facção via `UnitRegistry.GetByFaction`
+   - Filtra por:
+     - `IsOnScreen()` → **apenas visíveis na tela**
+     - `u.def == unit.def` → **mesmo UnitDefinition**
+   - Adiciona cada uma via `Add(u)`
+
+4. **Atualiza Âncora:**
+   - `_rangeAnchor = unit`
+
+5. **Notificação:**
+   - Dispara `FireChanged()`
+
+**Exemplo:**
+```
+Duplo clique em Worker (1):
+  → Clear()
+  → Seleciona: Worker (1), Worker (2), Worker (3) (todos workers na tela)
+  → Selection = {Worker1, Worker2, Worker3}
+
+Duplo clique em Archer (1):
+  → Clear()
+  → Seleciona: Archer (1), Archer (2), Archer (3) (todos archers na tela)
+  → Selection = {Archer1, Archer2, Archer3}
+```
+
+**Design Note:**
+- **Apenas visíveis na tela** (via `IsOnScreen`)
+- **Sem limite de distância** (mas se não estiver visível, não seleciona)
+- Compara `UnitDefinition` inteiro (`u.def == unit.def`)
+  - Alternativa: comparar apenas tipo (`u.def.type == unit.def.type`)
+
+---
+
+### 2.6 Métodos Auxiliares (Privados)
+
+#### **SelectByWorldRect(Vector3 a, Vector3 b, bool additive)**
+
+```csharp
+void SelectByWorldRect(Vector3 a, Vector3 b, bool additive)
+{
+    if (!additive) Clear();
+
+    var min = Vector3.Min(a, b);
+    var max = Vector3.Max(a, b);
+
+    var bounds = new Bounds();
+    bounds.SetMinMax(
+        new Vector3(min.x, float.MinValue, min.z),
+        new Vector3(max.x, float.MaxValue, max.z)
+    );
+
+    var mine = UnitRegistry.GetByFaction(player.myFaction);
+    for (int i = 0; i < mine.Count; i++)
+    {
+        var u = mine[i];
+        var pos = u.transform.position;
+        if (bounds.Contains(new Vector3(pos.x, 0f, pos.z))) Add(u);
+    }
+}
+```
+
+**Parâmetros:**
+- `a`, `b`: Dois cantos do retângulo (em world space)
+- `additive`: Se `true`, não limpa seleção anterior
+
+**Comportamento:**
+
+1. **Clear (opcional):**
+   - Se `additive = false`, limpa seleção anterior
+
+2. **Criar Bounds 3D:**
+   - `min` e `max` nos eixos X e Z
+   - Y é infinito (`float.MinValue` a `float.MaxValue`)
+   - Ou seja: retângulo 2D no plano XZ, com altura infinita
+
+3. **Testar Unidades:**
+   - Obtém unidades da facção via `UnitRegistry.GetByFaction`
+   - Para cada unidade, testa se `pos.xz` está dentro do bounds
+   - Se está, adiciona via `Add(u)`
+
+**Design Note:**
+- Usa **bounds 3D com Y infinito** (mais simples que projetar tudo em 2D)
+- Compara apenas `pos.x` e `pos.z` (ignora altura da unidade)
+- Testa apenas unidades da **facção do player** (otimização)
+
+---
+
+#### **ProjectScreenToXZ(Vector2 screenPos)**
+
+```csharp
+Vector3 ProjectScreenToXZ(Vector2 screenPos)
+{
+    var ray = cam.ScreenPointToRay(screenPos);
+    Plane groundPlane = new Plane(Vector3.up, Vector3.zero); // plano XZ no Y=0
+    if (groundPlane.Raycast(ray, out float enter))
+        return ray.GetPoint(enter);
+    return Vector3.zero; // fallback
+}
+```
+
+**Parâmetro:**
+- `screenPos`: Posição de tela
+
+**Retorno:**
+- Posição 3D no plano XZ (Y=0)
+
+**Uso:**
+- Fallback em `HandleEndDrag` se raycast não colidir com terreno
+- Garante que drag sempre tem posição final válida
+
+---
+
+#### **IsOnScreen(Vector3 worldPos)**
+
+```csharp
+bool IsOnScreen(Vector3 worldPos)
+{
+    var sp = cam.WorldToScreenPoint(worldPos);
+    return sp.z > 0 && IsInViewport(sp);
+}
+
+bool IsInViewport(Vector3 screenPos)
+{
+    return screenPos.x >= 0 && screenPos.x <= Screen.width &&
+           screenPos.y >= 0 && screenPos.y <= Screen.height;
+}
+```
+
+**Parâmetro:**
+- `worldPos`: Posição 3D no mundo
+
+**Retorno:**
+- `true` se posição está visível na tela
+
+**Comportamento:**
+1. Converte world → screen via `WorldToScreenPoint`
+2. Verifica se `sp.z > 0` (na frente da câmera)
+3. Verifica se está dentro dos limites da tela
+
+**Uso:**
+- `HandleDoubleClickUnit` para filtrar apenas unidades visíveis
+
+---
+
+### 2.7 Métodos Públicos (API Externa)
+
+#### **IsSelected(Unit u)**
+
+```csharp
+public bool IsSelected(Unit u) => u != null && _selection.Contains(u);
+```
+
+**Parâmetro:**
+- `u`: Unidade a testar
+
+**Retorno:**
+- `true` se unidade está selecionada
+
+**Uso:**
+```csharp
+if (selectionManager.IsSelected(unit))
+{
+    // Mostrar borda dourada na UI
+}
+```
+
+---
+
+#### **SelectExactly(IEnumerable<Unit> units)**
+
+```csharp
+public void SelectExactly(IEnumerable<Unit> units)
+{
+    Clear();
+    if (units != null)
+    {
+        foreach (var u in units) if (u != null) Add(u);
+    }
+    FireChanged();
+}
+```
+
+**Parâmetro:**
+- `units`: Coleção de unidades a selecionar
+
+**Comportamento:**
+- Limpa seleção anterior
+- Adiciona todas as unidades da coleção
+- Dispara `FireChanged()`
+
+**Uso:**
+```csharp
+// Selecionar todos os workers
+var workers = UnitRegistry.GetByFaction(player.myFaction)
+    .Where(u => u.def.type == UnitType.Worker);
+selectionManager.SelectExactly(workers);
+```
+
+---
+
+#### **SelectExactly(Unit u)**
+
+```csharp
+public void SelectExactly(Unit u)
+{
+    Clear();
+    if (u != null) Add(u);
+    FireChanged();
+}
+```
+
+**Parâmetro:**
+- `u`: Unidade única a selecionar
+
+**Comportamento:**
+- Limpa seleção anterior
+- Adiciona apenas esta unidade
+- Dispara `FireChanged()`
+
+**Uso:**
+```csharp
+// UI: jogador clica no portrait da unidade
+void OnPortraitClick(Unit unit)
+{
+    selectionManager.SelectExactly(unit);
+    cameraController.FocusOn(unit.transform);
+}
+```
+
+---
+
+#### **ToggleSet(IEnumerable<Unit> units)**
+
+```csharp
+public void ToggleSet(IEnumerable<Unit> units)
+{
+    if (units == null) return;
+    foreach (var u in units) if (u != null) Toggle(u);
+    FireChanged();
+}
+```
+
+**Parâmetro:**
+- `units`: Coleção de unidades a togglear
+
+**Comportamento:**
+- Para cada unidade: se selecionada → remove, se não → adiciona
+- Dispara `FireChanged()` **uma vez** ao final
+
+**Uso:**
+```csharp
+// Ctrl+Clique em grupo de UI
+void OnGroupCtrlClick(List<Unit> groupUnits)
+{
+    selectionManager.ToggleSet(groupUnits);
+}
+```
+
+---
+
+#### **AddToSelection(IEnumerable<Unit> units)** ✨ NOVO
+
+```csharp
+public void AddToSelection(IEnumerable<Unit> units)
+{
+    if (units == null) return;
+
+    bool changed = false;
+    foreach (var u in units)
+    {
+        if (u == null) continue;
+        if (_selection.Add(u))
+        {
+            u.SetSelected(true);
+            changed = true;
+        }
+    }
+
+    if (changed) FireChanged();
+}
+```
+
+**Parâmetro:**
+- `units`: Coleção de unidades a adicionar
+
+**Comportamento:**
+- Adiciona unidades **sem limpar seleção existente**
+- Dispara `FireChanged()` apenas se houve mudança
+- **Diferença de `SelectExactly`:** não limpa antes
+
+**Uso:**
+```csharp
+// Shift+Drag (adicionar à seleção)
+void OnShiftDrag(List<Unit> newUnits)
+{
+    selectionManager.AddToSelection(newUnits);
+}
+```
+
+---
+
+#### **ClearAnchor()**
+
+```csharp
+public void ClearAnchor() => _rangeAnchor = null;
+```
+
+**Descrição:** Limpa a âncora de range selection.
+
+**Uso:**
+- Futuro: Shift+Click para selecionar intervalo entre âncora e unidade clicada
+- Atualmente: apenas utility
+
+---
+
+### 2.8 Integração com GameEvents
+
+#### **Evento Emitido:**
+
+```csharp
+void FireChanged() => GameEvents.RaiseSelectionChanged(_selection);
+```
+
+**Descrição:** Dispara evento `OnSelectionChanged` toda vez que seleção muda.
+
+**Evento:**
+- `GameEvents.OnSelectionChanged` (Lote 1, Seção 2.4.5)
+- Assinatura: `Action<IReadOnlyCollection<Unit>>`
+
+**Listeners Típicos:**
+
+| Listener | Ação |
+|----------|------|
+| `UnitListUI` | Reconstruir lista de unidades selecionadas |
+| `SelectionInfoPanel` | Atualizar painel de informações |
+| `MinimapUI` | Destacar unidades selecionadas |
+| `AudioManager` | Tocar som de seleção |
+
+**Exemplo de Listener:**
+
+```csharp
+public class UnitListUI : MonoBehaviour
+{
+    void OnEnable()
+    {
+        GameEvents.OnSelectionChanged += OnSelectionChanged;
+    }
+    
+    void OnDisable()
+    {
+        GameEvents.OnSelectionChanged -= OnSelectionChanged;
+    }
+    
+    void OnSelectionChanged(IReadOnlyCollection<Unit> selection)
+    {
+        // Limpar lista
+        foreach (Transform child in listContainer)
+            Destroy(child.gameObject);
+        
+        // Criar itens para cada unidade selecionada
+        foreach (var unit in selection)
+        {
+            var item = Instantiate(itemPrefab, listContainer);
+            item.GetComponent<UnitListItemUI>().Bind(unit);
+        }
+    }
+}
+```
+
+---
+
+## 3) INPUTSELECTION - INTERFACE DE INPUT
+
+### 3.1 Visão Geral
 
 **Tipo:** `MonoBehaviour`  
-**Responsabilidade:** Raycasting para converter coordenadas de tela em objetos 3D (unidades ou terreno).
+**Responsabilidade:** Capturar input do jogador (cliques, drag, modificadores) e emitir eventos via GameEvents.
 
-#### **Campos Públicos (Inspector):**
+**Funcionalidades:**
+- ✅ Unity Input System (New Input System)
+- ✅ Detecção de cliques (LMB/RMB)
+- ✅ Detecção de drag (threshold configurável)
+- ✅ Detecção de duplo clique (janela temporal)
+- ✅ Detecção de modificadores (Ctrl, Shift)
+- ✅ Ignorar input sobre UI (EventSystem)
+- ✅ Emissão de 8 eventos via GameEvents
 
-```csharp
-public Camera cam;              // Câmera usada para raycasting
-public LayerMask unitMask;      // Layer "Unit" (User Layer 3)
-public LayerMask groundMask;    // Layer "Ground" (User Layer 7)
+### 3.2 Campos Públicos (Inspector)
+
+#### **Screenshot de Referência:**
+```
+┌─────────────────────────────────────────────────────┐
+│ Input Selection (Script)                            │
+├─────────────────────────────────────────────────────┤
+│ Refs                                                │
+│   Picker: Selection (World Picker)                 │
+│                                                     │
+│ Config                                              │
+│   Drag Threshold Px: 6                              │
+│   Double Click Window: 0.28                         │
+│                                                     │
+│ Actions (arraste do seu asset)                      │
+│   Point: Selection/Point (Input Action Reference)  │
+│   Lmb: Selection/LMB (Input Action Reference)      │
+│   Rmb: Selection/RMB (Input Action Reference)      │
+│   Ctrl: Selection/Ctrl (Input Action Reference)    │
+│   Shift: Selection/Shift (Input Action Reference)  │
+└─────────────────────────────────────────────────────┘
 ```
 
-#### **Métodos Públicos:**
+---
+
+#### **Seção: Refs**
 
 ```csharp
-/// <summary>
-/// Tenta detectar uma unidade na posição de tela fornecida.
-/// Usa raycast na Layer "Unit".
-/// </summary>
-/// <param name="screenPos">Posição em coordenadas de tela (pixels)</param>
-/// <param name="unit">Unidade detectada (out)</param>
-/// <returns>True se acertou uma unidade</returns>
+[Header("Refs")]
+public WorldPicker picker;
+```
+
+**picker (WorldPicker):**
+- **Descrição:** Referência ao `WorldPicker` para raycasting
+- **Uso:** `TryPickUnitAt()`, `TryPickGroundAt()`
+- **Obrigatório:** Sim
+
+---
+
+#### **Seção: Config**
+
+```csharp
+[Header("Config")]
+public float dragThresholdPx = 6f;
+public float doubleClickWindow = 0.28f;
+```
+
+**dragThresholdPx (float):**
+- **Descrição:** Distância mínima (em pixels) para considerar drag
+- **Padrão:** 6px
+- **Comportamento:**
+  - `distance < threshold` → Clique
+  - `distance >= threshold` → Drag
+- **Razão:** Evitar drag acidental ao clicar
+
+**doubleClickWindow (float):**
+- **Descrição:** Janela temporal (em segundos) para detectar duplo clique
+- **Padrão:** 0.28s
+- **Comportamento:**
+  - Se 2 cliques na mesma unidade em `<= 0.28s` → Duplo clique
+  - Senão → 2 cliques simples
+
+---
+
+#### **Seção: Actions**
+
+```csharp
+[Header("Actions (arraste do seu asset)")]
+public InputActionReference point; // Vector2
+public InputActionReference lmb;   // Button
+public InputActionReference rmb;   // Button
+public InputActionReference ctrl;  // Button
+public InputActionReference shift; // Button
+```
+
+**InputActionReference:**
+- **Tipo:** Referência a ações do Input System
+- **Como atribuir:** Arraste do Input Actions Asset no Inspector
+
+**Actions Necessárias:**
+
+| Action | Tipo | Binding Típico | Descrição |
+|--------|------|----------------|-----------|
+| `point` | Vector2 | Mouse Position | Posição do cursor |
+| `lmb` | Button | Mouse Left Button | Botão esquerdo |
+| `rmb` | Button | Mouse Right Button | Botão direito |
+| `ctrl` | Button | Keyboard Left Ctrl | Modificador Ctrl |
+| `shift` | Button | Keyboard Left Shift | Modificador Shift |
+
+**Setup do Input Actions Asset:**
+```
+Selection (Action Map)
+├─ Point (Value, Vector2) → Mouse/position
+├─ LMB (Button) → Mouse/leftButton
+├─ RMB (Button) → Mouse/rightButton
+├─ Ctrl (Button) → Keyboard/leftCtrl
+└─ Shift (Button) → Keyboard/leftShift
+```
+
+---
+
+### 3.3 Propriedades (Read-Only)
+
+#### **IsCtrlPressed (bool)**
+
+```csharp
+public bool IsCtrlPressed => ctrl != null && ctrl.action.IsPressed();
+```
+
+**Descrição:** Retorna `true` se Ctrl está pressionado no momento.
+
+**Uso:**
+```csharp
+// Em SelectionManager.HandleEndDrag()
+bool ctrl = input.IsCtrlPressed;
+SelectByWorldRect(start, end, additive: ctrl);
+```
+
+---
+
+#### **IsShiftPressed (bool)**
+
+```csharp
+public bool IsShiftPressed => shift != null && shift.action.IsPressed();
+```
+
+**Descrição:** Retorna `true` se Shift está pressionado no momento.
+
+**Uso:**
+```csharp
+// Futuro: Range selection
+if (input.IsShiftPressed)
+{
+    SelectRange(anchorUnit, clickedUnit);
+}
+```
+
+---
+
+### 3.4 Campos Privados (Estado Interno)
+
+```csharp
+Vector2 _pointer;          // Posição atual do cursor
+bool _lmbDown;             // LMB está pressionado?
+Vector2 _downPos;          // Posição onde LMB foi pressionado
+bool _dragging;            // Está em drag mode?
+
+bool _pressedOverUI;       // Clique começou sobre UI?
+float _lastClickTime;      // Timestamp do último clique
+Unit _lastClickedUnit;     // Última unidade clicada (para duplo clique)
+bool _overUIThisFrame;     // Cursor está sobre UI neste frame?
+```
+
+---
+
+### 3.5 Lifecycle (OnEnable/OnDisable)
+
+```csharp
+void OnEnable()
+{
+    point?.action.Enable();
+    lmb?.action.Enable();
+    rmb?.action.Enable();
+    ctrl?.action.Enable();
+    shift?.action.Enable();
+
+    point.action.performed += OnPointPerformed;
+    lmb.action.started += OnLmbStarted;
+    lmb.action.canceled += OnLmbCanceled;
+    rmb.action.performed += OnRmbPerformed;
+}
+
+void OnDisable()
+{
+    point.action.performed -= OnPointPerformed;
+    lmb.action.started -= OnLmbStarted;
+    lmb.action.canceled -= OnLmbCanceled;
+    rmb.action.performed -= OnRmbPerformed;
+
+    point?.action.Disable();
+    lmb?.action.Disable();
+    rmb?.action.Disable();
+    ctrl?.action.Disable();
+    shift?.action.Disable();
+}
+```
+
+**Comportamento:**
+- `OnEnable`: Habilita actions e subscreve callbacks
+- `OnDisable`: Desinscreve callbacks e desabilita actions
+
+**Callbacks:**
+
+| Action | Fase | Callback |
+|--------|------|----------|
+| `point` | performed | `OnPointPerformed` |
+| `lmb` | started | `OnLmbStarted` |
+| `lmb` | canceled | `OnLmbCanceled` |
+| `rmb` | performed | `OnRmbPerformed` |
+
+---
+
+### 3.6 Detecção de UI (EventSystem)
+
+```csharp
+void LateUpdate()
+{
+    _overUIThisFrame = ComputePointerOverUI();
+}
+
+bool IsPointerOverUI() => _overUIThisFrame;
+
+bool ComputePointerOverUI()
+{
+    if (EventSystem.current == null) return false;
+
+    // --- Input System novo: melhor passar um pointerId ---
+#if ENABLE_INPUT_SYSTEM
+    // Mouse
+    if (Mouse.current != null)
+        return EventSystem.current.IsPointerOverGameObject(Mouse.current.deviceId);
+
+    // Toque (qualquer dedo ativo)
+    if (Touchscreen.current != null)
+    {
+        foreach (var t in Touchscreen.current.touches)
+            if (t.isInProgress && EventSystem.current.IsPointerOverGameObject(t.touchId.ReadValue()))
+                return true;
+    }
+#endif
+
+    // Fallback (standalone/legacy)
+    return EventSystem.current.IsPointerOverGameObject();
+}
+```
+
+**Comportamento:**
+
+1. **LateUpdate:**
+   - Calcula `_overUIThisFrame` **uma vez por frame** (otimização)
+
+2. **ComputePointerOverUI:**
+   - **Mouse:** Usa `Mouse.current.deviceId` (correto para New Input System)
+   - **Touch:** Testa todos os toques ativos
+   - **Fallback:** Usa método legado sem ID
+
+**Uso:**
+- `OnLmbStarted`: Trava input se clique começou sobre UI
+- `OnPointPerformed`, `OnRmbPerformed`: Ignora se sobre UI
+
+**Por que é importante:**
+- Evita selecionar unidades quando clicando em botões de UI
+- Evita drag quando começou sobre UI panel
+
+---
+
+### 3.7 Callbacks de Input
+
+#### **OnPointPerformed(InputAction.CallbackContext ctx)**
+
+```csharp
+void OnPointPerformed(InputAction.CallbackContext ctx)
+{
+    // Ignora LMB iniciado sobre UI
+    if (IsPointerOverUI()) return;
+    _pointer = ctx.ReadValue<Vector2>();
+    if (_lmbDown && _dragging && !_pressedOverUI)
+    {
+        // REFATORAÇÃO: Disparar evento via GameEvents
+        GameEvents.RaiseDragging(_pointer);
+    }
+}
+```
+
+**Descrição:** Atualiza posição do cursor e dispara evento de dragging.
+
+**Comportamento:**
+1. Ignora se sobre UI
+2. Atualiza `_pointer`
+3. Se está em drag mode → dispara `GameEvents.RaiseDragging()`
+
+**Evento Emitido:**
+- `GameEvents.OnDragging` (Lote 1)
+- Assinatura: `Action<Vector2>` (screen position)
+
+---
+
+#### **OnLmbStarted(InputAction.CallbackContext _)**
+
+```csharp
+void OnLmbStarted(InputAction.CallbackContext _)
+{
+    _lmbDown = true;
+    _downPos = _pointer;
+
+    // <<< trava tudo se o clique começou sobre UI
+    _pressedOverUI = IsPointerOverUI();
+    _dragging = false;
+
+    if (!_pressedOverUI)
+    {
+        // REFATORAÇÃO: Disparar evento via GameEvents
+        GameEvents.RaisePointerDown(_downPos);
+    }
+}
+```
+
+**Descrição:** LMB foi pressionado (início do clique/drag).
+
+**Comportamento:**
+1. Marca `_lmbDown = true`
+2. Armazena `_downPos` (posição inicial)
+3. Testa se começou sobre UI → `_pressedOverUI`
+4. Se **não** sobre UI → dispara `GameEvents.RaisePointerDown()`
+
+**Evento Emitido:**
+- `GameEvents.OnPointerDown` (Lote 1)
+- Assinatura: `Action<Vector2>` (screen position)
+
+**Design Note:**
+- Se clique começou sobre UI, **TODO o input é travado** até `OnLmbCanceled`
+- Isso evita "vazamento" de cliques de UI para mundo
+
+---
+
+#### **OnLmbCanceled(InputAction.CallbackContext _)**
+
+```csharp
+void OnLmbCanceled(InputAction.CallbackContext _)
+{
+    var upPos = _pointer;
+
+    if (_pressedOverUI)
+    {
+        // Clique começou em UI → não é seleção do mundo
+        _pressedOverUI = false;
+        _lmbDown = false;
+        return;
+    }
+
+    if (_dragging)
+    {
+        // REFATORAÇÃO: Disparar evento via GameEvents
+        GameEvents.RaiseDragEnd(upPos);
+    }
+    else
+    {
+        HandleClick(upPos);
+    }
+
+    // REFATORAÇÃO: Disparar evento via GameEvents
+    GameEvents.RaisePointerUp(upPos);
+    _lmbDown = false;
+}
+```
+
+**Descrição:** LMB foi solto (fim do clique/drag).
+
+**Comportamento:**
+
+1. **Clique Começou Sobre UI:**
+   - Early return (ignora completamente)
+
+2. **Estava em Drag Mode:**
+   - Dispara `GameEvents.RaiseDragEnd()`
+
+3. **Não estava em Drag (clique simples):**
+   - Chama `HandleClick(upPos)`
+
+4. **Sempre:**
+   - Dispara `GameEvents.RaisePointerUp()`
+   - Reseta `_lmbDown = false`
+
+**Eventos Emitidos:**
+- `GameEvents.OnDragEnd` (Lote 1) - se estava dragging
+- `GameEvents.OnPointerUp` (Lote 1) - sempre
+
+---
+
+#### **OnRmbPerformed(InputAction.CallbackContext ctx)**
+
+```csharp
+void OnRmbPerformed(InputAction.CallbackContext ctx)
+{
+    // Ignora RMB iniciado sobre UI
+    if (IsPointerOverUI()) return;
+
+    if (picker != null && picker.TryPickGroundAt(_pointer, out var p, out _))
+    {
+        // REFATORAÇÃO: Disparar evento via GameEvents
+        GameEvents.RaiseGroundClick(p, false);
+    }
+}
+```
+
+**Descrição:** RMB foi clicado (botão direito).
+
+**Comportamento:**
+1. Ignora se sobre UI
+2. Tenta raycast no chão via `WorldPicker.TryPickGroundAt()`
+3. Se acertou → dispara `GameEvents.RaiseGroundClick(p, false)`
+
+**Evento Emitido:**
+- `GameEvents.OnGroundClick` (Lote 1)
+- Assinatura: `Action<Vector3, bool>` (worldPos, ctrl)
+- **Nota:** `ctrl = false` (RMB não considera Ctrl)
+
+**Uso Típico:**
+- RMB no chão → Limpar seleção (SelectionManager)
+- RMB no chão → Comando de movimento (futuro)
+
+---
+
+### 3.8 Detecção de Drag (Update)
+
+```csharp
+void Update()
+{
+    if (_lmbDown && !_dragging && !_pressedOverUI &&
+        Vector2.Distance(_downPos, _pointer) >= dragThresholdPx)
+    {
+        _dragging = true;
+        // REFATORAÇÃO: Disparar evento via GameEvents
+        GameEvents.RaiseDragBegin(_downPos);
+    }
+}
+```
+
+**Descrição:** Detecta quando LMB pressionado se torna drag.
+
+**Condições:**
+1. `_lmbDown = true` (LMB está pressionado)
+2. `!_dragging` (ainda não está em drag mode)
+3. `!_pressedOverUI` (não começou sobre UI)
+4. `Distance(_downPos, _pointer) >= dragThresholdPx` (moveu o suficiente)
+
+**Comportamento:**
+- Marca `_dragging = true`
+- Dispara `GameEvents.RaiseDragBegin(_downPos)`
+
+**Evento Emitido:**
+- `GameEvents.OnDragBegin` (Lote 1)
+- Assinatura: `Action<Vector2>` (screen position inicial)
+
+**Design Note:**
+- Threshold de 6px evita drag acidental
+- Drag só começa após mover 6px (não no OnLmbStarted)
+
+---
+
+### 3.9 Detecção de Clique e Duplo Clique
+
+```csharp
+void HandleClick(Vector2 screenPos)
+{
+    if (picker == null) return;
+
+    bool isCtrl = IsCtrlPressed;
+    bool isShift = IsShiftPressed;
+
+    if (picker.TryPickUnitAt(screenPos, out var unit))
+    {
+        // double click
+        if (unit == _lastClickedUnit &&
+            (Time.unscaledTime - _lastClickTime) <= doubleClickWindow)
+        {
+            // REFATORAÇÃO: Disparar evento via GameEvents
+            GameEvents.RaiseUnitDoubleClick(unit);
+            _lastClickedUnit = null;
+            _lastClickTime = 0f;
+            return;
+        }
+
+        // REFATORAÇÃO: Disparar evento via GameEvents
+        GameEvents.RaiseUnitClick(unit, isCtrl);
+        _lastClickedUnit = unit;
+        _lastClickTime = Time.unscaledTime;
+    }
+    else if (picker.TryPickGroundAt(screenPos, out var point, out _))
+    {
+        // REFATORAÇÃO: Disparar evento via GameEvents
+        GameEvents.RaiseGroundClick(point, isCtrl);
+        _lastClickedUnit = null;
+        _lastClickTime = 0f;
+    }
+}
+```
+
+**Descrição:** Processa clique (chamado por `OnLmbCanceled`).
+
+**Comportamento:**
+
+1. **Raycast para Unidade:**
+   - Usa `WorldPicker.TryPickUnitAt()`
+   - Se acertou unidade:
+     - **Testa Duplo Clique:**
+       - Mesma unidade + dentro da janela temporal?
+       - **Sim:** Dispara `GameEvents.RaiseUnitDoubleClick(unit)` e retorna
+       - **Não:** Continua para clique simples
+     - **Clique Simples:**
+       - Dispara `GameEvents.RaiseUnitClick(unit, isCtrl)`
+       - Atualiza `_lastClickedUnit` e `_lastClickTime`
+
+2. **Raycast para Chão:**
+   - Usa `WorldPicker.TryPickGroundAt()`
+   - Se acertou chão:
+     - Dispara `GameEvents.RaiseGroundClick(point, isCtrl)`
+     - Reseta tracking de duplo clique
+
+**Eventos Emitidos:**
+- `GameEvents.OnUnitDoubleClick` (Lote 1) - se duplo clique
+- `GameEvents.OnUnitClick` (Lote 1) - se clique simples em unidade
+- `GameEvents.OnGroundClick` (Lote 1) - se clique no chão
+
+**Modificadores:**
+- `isCtrl`: Passado para eventos (SelectionManager usa para Toggle)
+- `isShift`: Lido mas não usado (reservado para futuro)
+
+---
+
+### 3.10 Resumo de Eventos Emitidos
+
+**InputSelection emite 8 eventos via GameEvents:**
+
+| Evento | Quando | Parâmetros | Uso Típico |
+|--------|--------|------------|------------|
+| `OnPointerDown` | LMB pressionado (não sobre UI) | `Vector2 screenPos` | Início de interação |
+| `OnPointerUp` | LMB solto (sempre) | `Vector2 screenPos` | Fim de interação |
+| `OnDragBegin` | Moveu > threshold (Update) | `Vector2 startPos` | Início de drag rect |
+| `OnDragging` | Movendo durante drag | `Vector2 currentPos` | Atualizar drag rect |
+| `OnDragEnd` | LMB solto após drag | `Vector2 endPos` | Selecionar por retângulo |
+| `OnUnitClick` | Clique em unidade | `Unit unit, bool ctrl` | Selecionar unidade |
+| `OnGroundClick` | Clique no chão | `Vector3 worldPos, bool ctrl` | Limpar seleção / Mover |
+| `OnUnitDoubleClick` | Duplo clique em unidade | `Unit unit` | Selecionar todas do tipo |
+
+---
+
+## 4) WORLDPICKER - RAYCASTING
+
+### 4.1 Visão Geral
+
+**Tipo:** `MonoBehaviour`  
+**Responsabilidade:** Realizar raycasts para detectar unidades e terreno sob o cursor.
+
+**Funcionalidades:**
+- ✅ Raycast para unidades (LayerMask configurável)
+- ✅ Raycast para terreno (LayerMask configurável)
+- ✅ Suporte a `UnitHitProxy` (hierarquias complexas)
+
+### 4.2 Campos Públicos (Inspector)
+
+#### **Screenshot de Referência:**
+```
+┌─────────────────────────────────────────────────────┐
+│ World Picker (Script)                               │
+├─────────────────────────────────────────────────────┤
+│ Cam: Main Camera (Camera)                           │
+│ Unit Mask: Unit                                     │
+│ Ground Mask: Ground                                 │
+└─────────────────────────────────────────────────────┘
+```
+
+---
+
+```csharp
+public Camera cam;
+public LayerMask unitMask;   // Unit
+public LayerMask groundMask; // Ground
+float maxDistance = float.MaxValue;
+
+void Reset() { cam = Camera.main; }
+```
+
+**cam (Camera):**
+- **Descrição:** Câmera usada para raycasting
+- **Padrão:** `Camera.main` (via `Reset()`)
+
+**unitMask (LayerMask):**
+- **Descrição:** Layer das unidades
+- **Valor:** `Unit` (layer 6, por exemplo)
+- **Uso:** `Physics.Raycast(..., unitMask, ...)`
+
+**groundMask (LayerMask):**
+- **Descrição:** Layer do terreno
+- **Valor:** `Ground` (layer 7, por exemplo)
+- **Uso:** `Physics.Raycast(..., groundMask, ...)`
+
+**maxDistance (float):**
+- **Descrição:** Distância máxima de raycast
+- **Padrão:** `float.MaxValue` (infinito)
+- **Privado:** Não exposto no Inspector
+
+---
+
+### 4.3 Métodos Públicos
+
+#### **TryPickUnitAt(Vector2 screenPos, out Unit unit)**
+
+```csharp
 public bool TryPickUnitAt(Vector2 screenPos, out Unit unit)
-
-/// <summary>
-/// Tenta detectar terreno na posição de tela fornecida.
-/// Usa raycast na Layer "Ground".
-/// </summary>
-/// <param name="screenPos">Posição em coordenadas de tela (pixels)</param>
-/// <param name="point">Posição 3D do ponto de impacto (out)</param>
-/// <param name="normal">Normal da superfície (out)</param>
-/// <returns>True se acertou terreno</returns>
-public bool TryPickGroundAt(Vector2 screenPos, out Vector3 point, out Vector3 normal)
-```
-
-#### **Implementação Interna:**
-
-```csharp
-// Simplificado para referência
-public bool TryPickUnitAt(Vector2 screenPos, out Unit unit) {
+{
     unit = null;
     var ray = cam.ScreenPointToRay(screenPos);
-    if (Physics.Raycast(ray, out var hit, maxDistance, unitMask, QueryTriggerInteraction.Collide)) {
+    if (Physics.Raycast(ray, out var hit, maxDistance, unitMask, QueryTriggerInteraction.Collide))
+    {
         unit = hit.collider.GetComponentInParent<Unit>();
         return unit != null;
     }
@@ -8019,1928 +9242,2099 @@ public bool TryPickUnitAt(Vector2 screenPos, out Unit unit) {
 }
 ```
 
-**Nota:** `QueryTriggerInteraction.Collide` permite detectar triggers (UnitHitProxy usa SphereCollider com `Is Trigger = true`).
+**Parâmetros:**
+- `screenPos`: Posição de tela (pixels)
+- `unit` (out): Unidade detectada (ou `null`)
+
+**Retorno:**
+- `true` se encontrou unidade
+
+**Comportamento:**
+1. Cria ray via `ScreenPointToRay`
+2. Raycast com `unitMask`
+3. **QueryTriggerInteraction.Collide:** Aceita triggers (importante!)
+4. Se acertou, pega `Unit` via `GetComponentInParent<Unit>()`
+   - Suporta hierarquias: `Unit → Model → Collider`
+5. Retorna `true` se encontrou `Unit`, `false` senão
+
+**Uso:**
+```csharp
+if (picker.TryPickUnitAt(mousePos, out Unit unit))
+{
+    Debug.Log($"Clicou em: {unit.DisplayName}");
+}
+```
 
 ---
 
-### 3.3 SelectionManager
-
-**Tipo:** `MonoBehaviour`  
-**Responsabilidade:** Gerencia o estado de seleção (HashSet de unidades) e aplica regras de seleção (filtro por facção, modificadores Ctrl/Shift).
-
-#### **Campos Públicos (Inspector):**
+#### **TryPickGroundAt(Vector2 screenPos, out Vector3 point, out Vector3 normal)**
 
 ```csharp
-[Header("Selection")]
-[Tooltip("Px extras no retângulo para evitar perda por borda")]
-public float rectInflatePx = 1.5f;
-
-[Header("Refs")]
-public PlayerController player;  // Define a facção local (Player1, etc.)
-public Camera cam;               // Mesma câmera usada no WorldPicker
-public InputSelection input;     // Referência ao input
-
-[Header("Filtro")]
-public bool onlyOwnUnits = true; // Nunca selecionar unidades de outra facção
-```
-
-#### **Propriedades Públicas:**
-
-```csharp
-/// <summary>
-/// Seleção atual (read-only). Use métodos públicos para modificar.
-/// </summary>
-public IReadOnlyCollection<Unit> Selection { get; }
-
-/// <summary>
-/// Quantidade de unidades selecionadas.
-/// </summary>
-public int Count { get; }
-```
-
-#### **Eventos:**
-
-```csharp
-/// <summary>
-/// Disparado sempre que a seleção muda (add, remove, clear).
-/// ⚠️ ATENÇÃO: Evento LOCAL (não usa GameEvents ainda).
-/// </summary>
-public event Action<IReadOnlyCollection<Unit>> OnSelectionChanged;
-```
-
-#### **Métodos Públicos (Para Integração com UI):**
-
-```csharp
-/// <summary>
-/// Verifica se uma unidade está selecionada.
-/// </summary>
-public bool IsSelected(Unit u)
-
-/// <summary>
-/// Limpa seleção atual e seleciona exatamente as unidades fornecidas.
-/// Dispara OnSelectionChanged.
-/// </summary>
-/// <param name="units">Coleção de unidades para selecionar</param>
-public void SelectExactly(IEnumerable<Unit> units)
-
-/// <summary>
-/// Limpa seleção atual e seleciona exatamente uma unidade.
-/// Dispara OnSelectionChanged.
-/// </summary>
-/// <param name="u">Unidade para selecionar</param>
-public void SelectExactly(Unit u)
-
-/// <summary>
-/// Alterna estado de seleção (toggle) para cada unidade fornecida.
-/// Dispara OnSelectionChanged.
-/// </summary>
-/// <param name="units">Coleção de unidades para alternar</param>
-public void ToggleSet(IEnumerable<Unit> units)
-
-/// <summary>
-/// Adiciona unidades à seleção atual (união) sem limpar existentes.
-/// Dispara OnSelectionChanged se houver mudanças.
-/// </summary>
-/// <param name="units">Coleção de unidades para adicionar</param>
-public void AddToSelection(IEnumerable<Unit> units)
-
-/// <summary>
-/// Limpa a âncora de range (usada em seleção por shift-click - não implementado).
-/// </summary>
-public void ClearAnchor()
-```
-
-#### **Métodos Internos (Handlers de Input):**
-
-```csharp
-// Chamados automaticamente pelos eventos do InputSelection
-void HandleClickUnit(Unit unit, bool ctrl)
-void HandleClickGround(Vector3 worldPoint, bool ctrl)
-void HandleEndDrag(Vector2 endScreenPos)
-void HandleDoubleClickUnit(Unit unit)
-```
-
-#### **Padrões de Uso:**
-
-```csharp
-// UI de Lista de Unidades
-void OnEnable() {
-    selectionManager.OnSelectionChanged += UpdateListUI;
-}
-
-void UpdateListUI(IReadOnlyCollection<Unit> selectedUnits) {
-    // Atualizar visual dos itens da lista
-    foreach (var item in listItems) {
-        bool selected = selectedUnits.Contains(item.Unit);
-        item.SetSelected(selected);
+public bool TryPickGroundAt(Vector2 screenPos, out Vector3 point, out Vector3 normal)
+{
+    point = default; normal = Vector3.up;
+    var ray = cam.ScreenPointToRay(screenPos);
+    if (Physics.Raycast(ray, out var hit, maxDistance, groundMask, QueryTriggerInteraction.Ignore))
+    {
+        point = hit.point; normal = hit.normal;
+        return true;
     }
+    return false;
 }
+```
 
-// Sistema de Comandos (futuro)
-void OnRightClick(Vector3 destination) {
-    foreach (var unit in selectionManager.Selection) {
-        unit.MoveTo(destination);
-    }
+**Parâmetros:**
+- `screenPos`: Posição de tela (pixels)
+- `point` (out): Posição 3D do hit
+- `normal` (out): Normal da superfície
+
+**Retorno:**
+- `true` se encontrou terreno
+
+**Comportamento:**
+1. Cria ray via `ScreenPointToRay`
+2. Raycast com `groundMask`
+3. **QueryTriggerInteraction.Ignore:** Ignora triggers
+4. Se acertou, retorna `hit.point` e `hit.normal`
+5. Retorna `true` se acertou, `false` senão
+
+**Uso:**
+```csharp
+if (picker.TryPickGroundAt(mousePos, out Vector3 pos, out Vector3 normal))
+{
+    Debug.Log($"Clicou no chão em: {pos}");
+    // Spawn partícula, mover unidade, etc.
 }
 ```
 
 ---
 
-### 3.4 UnitHitProxy
+### 4.4 LayerMasks e Configuração
 
-**Tipo:** `MonoBehaviour`  
-**Responsabilidade:** Facilitar raycasting em prefabs de unidades com hierarquias complexas. Atua como "ponte" entre o collider detectado e o componente `Unit`.
+#### **Configuração de Layers:**
 
-#### **Campos Públicos (Inspector):**
+**Unity Editor:**
+1. Edit → Project Settings → Tags and Layers
+2. Layers:
+   - Layer 6: `Unit`
+   - Layer 7: `Ground`
 
-```csharp
-public Unit unit; // Referência ao componente Unit (auto-atribuída no Reset)
-```
+**Collision Matrix:**
+- Edit → Project Settings → Physics
+- Desmarcar colisões desnecessárias:
+  - Unit × Unit (se não houver colisão física entre unidades)
+  - Unit × Ground (se unidades flutuam sobre terreno)
 
-#### **Método Especial:**
-
-```csharp
-void Reset() {
-    // Auto-atribuição no Inspector
-    unit = GetComponentInParent<Unit>();
-}
-```
-
-#### **Hierarquia Típica:**
-
-```
-Worker (Unit component)
-├── Armature (modelo 3D)
-│   ├── Body (MeshRenderer)
-│   └── ...
-└── HitProxy (GameObject)
-    ├── UnitHitProxy (Script)
-    └── SphereCollider (Trigger, Layer: Unit)
-```
-
-#### **Por que é necessário?**
-
-Em RTSs, prefabs de unidades frequentemente têm hierarquias complexas (modelo 3D, animações, VFX). O raycasting pode acertar um collider filho que não tem o componente `Unit` diretamente. `UnitHitProxy` garante que o raycast sempre retorne a unidade correta usando `GetComponentInParent<Unit>()`.
-
-#### **Configuração Típica:**
-
-1. Criar GameObject filho na raiz da unidade: `HitProxy`
-2. Adicionar componente `UnitHitProxy`
-3. Adicionar `SphereCollider`:
-   - `Is Trigger`: ✅ Checked
-   - `Radius`: ~1.1 (cobrir a unidade)
-   - `Layer`: **Unit** (User Layer 3)
-4. Script auto-atribui referência ao `Unit` pai
+**GameObjects:**
+- **Unidades:** Layer `Unit`
+  - Ou: Collider filho com layer `Unit` + `UnitHitProxy`
+- **Terreno:** Layer `Ground`
 
 ---
 
-### 3.5 DragRectRenderer
-
-**Tipo:** `MonoBehaviour`  
-**Responsabilidade:** Feedback visual durante seleção por arrasto (desenha retângulo amarelo no chão).
-
-#### **Campos Públicos (Inspector):**
+#### **Por que QueryTriggerInteraction.Collide?**
 
 ```csharp
-public InputSelection input; // Referência ao input para escutar drag
-public Camera cam;           // Câmera para conversão tela→mundo
-public GameObject quadPrefab; // Prefab do quad (plano 3D)
+// Em TryPickUnitAt()
+QueryTriggerInteraction.Collide
 ```
 
-#### **Comportamento:**
+**Razão:**
+- Permite usar **Trigger Colliders** nas unidades
+- Trigger colliders são mais leves (não causam colisão física)
+- Útil se unidade tem collider para seleção + collider para física
 
-1. **OnBeginDrag**: Instancia `quadPrefab` na posição inicial
-2. **OnDragging**: Atualiza posição e escala do quad baseado em posição atual do mouse
-3. **OnEndDrag**: Destrói o quad
+**Exemplo:**
+```
+Unit (GameObject)
+├─ Model (visual)
+├─ Physics Collider (non-trigger) ← Colisão física
+└─ Selection Collider (trigger) ← Seleção de mouse
+   └─ UnitHitProxy (Script)
+```
 
-#### **Implementação Simplificada:**
+---
+
+## 5) DRAGRECTRENDERER - VISUAL DE ARRASTO
+
+### 5.1 Visão Geral
+
+**Tipo:** `MonoBehaviour`  
+**Responsabilidade:** Renderizar retângulo visual de seleção durante drag.
+
+**Funcionalidades:**
+- ✅ Cria quad 3D durante drag
+- ✅ Atualiza tamanho/posição em tempo real
+- ✅ Destrói quad ao soltar
+
+### 5.2 Campos Públicos (Inspector)
+
+#### **Screenshot de Referência:**
+```
+┌─────────────────────────────────────────────────────┐
+│ Drag Rect Renderer (Script)                         │
+├─────────────────────────────────────────────────────┤
+│ Cam: Main Camera (Camera)                           │
+│ Quad Prefab: Quad (GameObject)                      │
+└─────────────────────────────────────────────────────┘
+```
+
+---
 
 ```csharp
-void BeginRect(Vector2 screenStart) {
-    // Converte tela → mundo via raycast
-    if (Physics.Raycast(cam.ScreenPointToRay(screenStart), out var hit)) {
+public Camera cam;
+public GameObject quadPrefab;
+
+GameObject _activeQuad;
+Vector3 _startWorld;
+```
+
+**cam (Camera):**
+- **Descrição:** Câmera para raycasting
+- **Uso:** Converter screen → world
+
+**quadPrefab (GameObject):**
+- **Descrição:** Prefab do quad visual
+- **Componentes:** Quad mesh + Material semi-transparente
+- **Configuração:** Ver Seção 5.4
+
+---
+
+### 5.3 Lifecycle e Eventos
+
+```csharp
+void OnEnable()
+{
+    // REFATORAÇÃO: Subscrever eventos via GameEvents
+    GameEvents.OnDragBegin += BeginRect;
+    GameEvents.OnDragging += UpdateRect;
+    GameEvents.OnDragEnd += EndRect;
+}
+
+void OnDisable()
+{
+    // REFATORAÇÃO: Desinscrever eventos via GameEvents
+    GameEvents.OnDragBegin -= BeginRect;
+    GameEvents.OnDragging -= UpdateRect;
+    GameEvents.OnDragEnd -= EndRect;
+}
+```
+
+**Eventos Consumidos:**
+
+| Evento | Handler | Descrição |
+|--------|---------|-----------|
+| `OnDragBegin` | `BeginRect` | Cria quad |
+| `OnDragging` | `UpdateRect` | Atualiza quad |
+| `OnDragEnd` | `EndRect` | Destrói quad |
+
+---
+
+### 5.4 Métodos de Renderização
+
+#### **BeginRect(Vector2 screenStart)**
+
+```csharp
+void BeginRect(Vector2 screenStart)
+{
+    if (!cam || !quadPrefab) return;
+
+    if (Physics.Raycast(cam.ScreenPointToRay(screenStart), out var hit))
+    {
         _startWorld = hit.point;
         _activeQuad = Instantiate(quadPrefab);
         _activeQuad.SetActive(true);
+        UpdateRect(screenStart); // desenha um frame inicial
     }
 }
+```
 
-void UpdateRect(Vector2 screenPos) {
-    if (_activeQuad == null) return;
-    if (Physics.Raycast(cam.ScreenPointToRay(screenPos), out var hit)) {
+**Parâmetro:**
+- `screenStart`: Posição de tela onde drag começou
+
+**Comportamento:**
+1. Valida `cam` e `quadPrefab`
+2. Raycast para obter `_startWorld`
+3. Instancia `quadPrefab` → `_activeQuad`
+4. Ativa quad
+5. Chama `UpdateRect` para desenhar frame inicial
+
+---
+
+#### **UpdateRect(Vector2 screenPos)**
+
+```csharp
+void UpdateRect(Vector2 screenPos)
+{
+    if (_activeQuad == null || !cam) return;
+
+    if (Physics.Raycast(cam.ScreenPointToRay(screenPos), out var hit))
+    {
         Vector3 endWorld = hit.point;
+
         Vector3 center = (_startWorld + endWorld) * 0.5f;
         Vector3 size = new Vector3(
             Mathf.Abs(endWorld.x - _startWorld.x),
             Mathf.Abs(endWorld.z - _startWorld.z),
             1f
         );
+        center.y = 1f;
         _activeQuad.transform.position = center;
         _activeQuad.transform.localScale = size;
     }
 }
-
-void EndRect(Vector2 _) {
-    if (_activeQuad != null) Destroy(_activeQuad);
-}
 ```
 
-#### **Prefab `Quad` (Configuração):**
+**Parâmetro:**
+- `screenPos`: Posição atual do cursor
 
-- **Componentes**:
-  - `Transform`
-  - `Quad (Mesh Filter)` com mesh padrão do Unity
-  - `Mesh Renderer` com material `SelectionMaterial`
-- **Material**:
-  - Shader: `Universal Render Pipeline/Lit` (ou `Unlit`)
-  - Color: Amarelo semi-transparente (`RGBA: 1, 1, 0, 0.3`)
-  - Rendering Mode: Transparent
-- **Transform**:
-  - Rotation: `(90, 0, 0)` (deitado no chão)
-  - Scale: `(1, 1, 1)` (atualizado dinamicamente)
+**Comportamento:**
+1. Valida `_activeQuad` e `cam`
+2. Raycast para obter `endWorld`
+3. Calcula `center` (ponto médio entre start e end)
+4. Calcula `size`:
+   - X: largura (abs de diferença em X)
+   - Y: profundidade (abs de diferença em Z)
+   - Z: altura fixa (1f, não usado)
+5. Fixa `center.y = 1f` (altura sobre o chão)
+6. Atualiza `position` e `localScale` do quad
+
+**Design Note:**
+- Quad está no plano XZ (paralelo ao chão)
+- `center.y = 1f` eleva quad 1 unidade acima do terreno
+- `size.x` e `size.y` correspondem a X e Z no mundo
 
 ---
 
-## 4) EVENTOS CHAVE
+#### **EndRect(Vector2 _)**
 
-### 4.1 Eventos Disparados
-
-| Componente | Evento | Assinatura | Quando Dispara | Listeners Típicos |
-|------------|--------|-----------|----------------|-------------------|
-| `InputSelection` | `OnClickUnit` | `Action<Unit, bool>` | LMB up em unidade (não é drag) | `SelectionManager` |
-| `InputSelection` | `OnDoubleClickUnit` | `Action<Unit>` | Duplo-clique em unidade (< 280ms) | `SelectionManager` |
-| `InputSelection` | `OnClickGround` | `Action<Vector3, bool>` | LMB/RMB up no terreno | `SelectionManager`, Comandos (futuro) |
-| `InputSelection` | `OnBeginDrag` | `Action<Vector2>` | LMB arrasta > 6px | `SelectionManager`, `DragRectRenderer` |
-| `InputSelection` | `OnDragging` | `Action<Vector2>` | Continuamente durante drag | `DragRectRenderer` |
-| `InputSelection` | `OnEndDrag` | `Action<Vector2>` | LMB up após drag | `SelectionManager`, `DragRectRenderer` |
-| `SelectionManager` | `OnSelectionChanged` | `Action<IReadOnlyCollection<Unit>>` | Seleção mudou (add/remove/clear) | UI, Minimap, Audio (futuro) |
-
-### 4.2 Eventos Escutados
-
-| Componente | Escuta | Proveniente De | Uso |
-|------------|--------|---------------|-----|
-| `SelectionManager` | `input.OnClickUnit` | `InputSelection` | Processar clique em unidade |
-| `SelectionManager` | `input.OnClickGround` | `InputSelection` | Limpar seleção (ou comando futuro) |
-| `SelectionManager` | `input.OnBeginDrag` | `InputSelection` | Armazenar posição inicial de drag |
-| `SelectionManager` | `input.OnEndDrag` | `InputSelection` | Selecionar unidades no retângulo |
-| `SelectionManager` | `input.OnDoubleClickUnit` | `InputSelection` | Selecionar todas do mesmo tipo |
-| `DragRectRenderer` | `input.OnBeginDrag` | `InputSelection` | Começar a desenhar retângulo |
-| `DragRectRenderer` | `input.OnDragging` | `InputSelection` | Atualizar retângulo |
-| `DragRectRenderer` | `input.OnEndDrag` | `InputSelection` | Destruir retângulo |
-
-### 4.3 Fluxograma de Eventos (Drag Selection)
-
-```
-┌─────────────┐
-│  Jogador    │
-│  Pressiona  │
-│  LMB        │
-└──────┬──────┘
-       │
-       ▼
-┌──────────────────────────────────────────────────┐
-│ InputSelection.OnLmbStarted()                    │
-│  • _lmbDown = true                               │
-│  • _pressedOverUI = IsPointerOverUI()            │
-│  • if (!_pressedOverUI) OnPointerDown?.Invoke()  │
-└──────┬───────────────────────────────────────────┘
-       │
-       ▼
-┌──────────────────────────────────────────────────┐
-│ InputSelection.Update() (cada frame)             │
-│  • if (!_dragging && Distance > 6px)             │
-│    → _dragging = true                            │
-│    → OnBeginDrag?.Invoke(_downPos) ───────────┐  │
-└──────┬───────────────────────────────────────┐ │  │
-       │                                       │ │  │
-       ▼                                       ▼ ▼  ▼
-┌─────────────────────────────────┐  ┌────────────────────────┐
-│ SelectionManager                │  │ DragRectRenderer       │
-│  .HandleBeginDrag()             │  │  .BeginRect()          │
-│   • Armazena _dragStartWorld    │  │   • Instancia quadPrefab│
-└─────────────────────────────────┘  └────────────────────────┘
-       │
-       │ (Jogador move o mouse)
-       ▼
-┌──────────────────────────────────────────────────┐
-│ InputSelection.OnPointPerformed()                │
-│  • if (_dragging) OnDragging?.Invoke(_pointer) ──┐
-└──────────────────────────────────────────────────┘│
-                                                    ▼
-                                   ┌─────────────────────────────┐
-                                   │ DragRectRenderer            │
-                                   │  .UpdateRect()              │
-                                   │   • Atualiza posição/escala │
-                                   └─────────────────────────────┘
-       │
-       │ (Jogador solta LMB)
-       ▼
-┌──────────────────────────────────────────────────┐
-│ InputSelection.OnLmbCanceled()                   │
-│  • if (_dragging) OnEndDrag?.Invoke(upPos) ──────┤
-└──────┬───────────────────────────────────────┬───┘
-       │                                       │
-       ▼                                       ▼
-┌─────────────────────────────────┐  ┌────────────────────────┐
-│ SelectionManager                │  │ DragRectRenderer       │
-│  .HandleEndDrag()               │  │  .EndRect()            │
-│   • SelectByWorldRect()         │  │   • Destroy(quadPrefab)│
-│   • FireChanged() ─────────────┐│  └────────────────────────┘
-└─────────────────────────────────┘│
-                                   ▼
-                      ┌──────────────────────────────┐
-                      │ OnSelectionChanged           │
-                      │   (IReadOnlyCollection<Unit>)│
-                      └────────┬─────────────────────┘
-                               │
-                ┌──────────────┼──────────────┐
-                ▼              ▼              ▼
-          [UI Panel]      [Minimap]    [Audio Manager]
-```
-
----
-
-## 5) CONFIGURAÇÃO E SETUP
-
-### 5.1 Layers do Projeto
-
-O sistema de seleção depende de **Layers configuradas corretamente** para raycasting otimizado.
-
-#### **Configuração Obrigatória:**
-
-| Layer Number | Layer Name | Uso | Configuração |
-|-------------|-----------|-----|--------------|
-| **User Layer 3** | **Unit** | Colliders de unidades (UnitHitProxy) | ✅ Deve ser Trigger |
-| **User Layer 7** | **Ground** | Terreno/chão (para cliques) | ✅ Pode ser sólido |
-
-**Screenshot da Configuração:**
-![Layers Configuration](reference://1761256546559_image.png)
-
-#### **Passos para Configurar:**
-
-1. Abra `Edit > Project Settings > Tags and Layers`
-2. Expanda `Layers`
-3. Configure:
-   - `User Layer 3` = "Unit"
-   - `User Layer 7` = "Ground"
-4. **Aplique às Colliders:**
-   - GameObject `HitProxy` (filho de cada unidade) → Layer "Unit"
-   - GameObject `Terrain` → Layer "Ground"
-
----
-
-### 5.2 Input Actions Asset
-
-O sistema usa **Unity Input System** via `InputActionAsset`.
-
-#### **Estrutura do Asset:**
-
-```
-InputActionAsset: "InputSystem"
-└─ Action Map: "Selection"
-   ├─ Point (Value, Vector2)     → Mouse Position
-   ├─ LMB (Button)                → Left Mouse Button
-   ├─ RMB (Button)                → Right Mouse Button
-   ├─ Ctrl (Button)               → Ctrl Keys (left/right/generic)
-   └─ Shift (Button)              → Shift Keys (left/right/generic)
-```
-
-#### **Bindings Detalhados:**
-
-| Action | Type | Binding | Notes |
-|--------|------|---------|-------|
-| **Point** | Value (Vector2) | `<Mouse>/position` | Posição contínua do cursor |
-| **LMB** | Button | `<Mouse>/leftButton` | Pressed/Released |
-| **RMB** | Button | `<Mouse>/rightButton` | Pressed/Released |
-| **Ctrl** | Button | `<Keyboard>/ctrl`<br>`<Keyboard>/leftCtrl`<br>`<Keyboard>/rightCtrl` | 3 bindings para cobrir ambos lados |
-| **Shift** | Button | `<Keyboard>/shift`<br>`<Keyboard>/leftShift`<br>`<Keyboard>/rightShift` | 3 bindings para cobrir ambos lados |
-
-**JSON Completo:**
-```json
+```csharp
+void EndRect(Vector2 _)
 {
-  "maps": [
+    if (_activeQuad != null)
     {
-      "name": "Selection",
-      "actions": [
-        { "name": "Point", "type": "Value", "expectedControlType": "Vector2" },
-        { "name": "LMB", "type": "Button" },
-        { "name": "RMB", "type": "Button" },
-        { "name": "Ctrl", "type": "Button" },
-        { "name": "Shift", "type": "Button" }
-      ],
-      "bindings": [
-        { "path": "<Mouse>/position", "action": "Point" },
-        { "path": "<Mouse>/leftButton", "action": "LMB" },
-        { "path": "<Mouse>/rightButton", "action": "RMB" },
-        { "path": "<Keyboard>/ctrl", "action": "Ctrl" },
-        { "path": "<Keyboard>/leftCtrl", "action": "Ctrl" },
-        { "path": "<Keyboard>/rightCtrl", "action": "Ctrl" },
-        { "path": "<Keyboard>/shift", "action": "Shift" },
-        { "path": "<Keyboard>/leftShift", "action": "Shift" },
-        { "path": "<Keyboard>/rightShift", "action": "Shift" }
-      ]
+        Destroy(_activeQuad);
+        _activeQuad = null;
     }
-  ]
 }
 ```
 
-#### **Como Criar o Asset:**
+**Parâmetro:**
+- `_`: Não usado (posição final, ignorada)
 
-1. `Assets > Create > Input Actions`
-2. Nomeie como "InputSystem"
-3. Adicione Action Map "Selection"
-4. Configure Actions e Bindings conforme tabela acima
-5. Clique em "Generate C# Class" (opcional, mas recomendado)
-6. Salve o asset
+**Comportamento:**
+- Destrói `_activeQuad`
+- Reseta referência para `null`
 
 ---
 
-### 5.3 Hierarquia de GameObjects na Cena
+### 5.5 Configuração do Prefab
 
-#### **Estrutura Recomendada:**
-
+#### **Screenshot de Referência (Quad Prefab):**
 ```
-SampleScene
-├─ GLOBALSCRIPTS
-│  ├─ GameContext
-│  ├─ PlayerSettings (PlayerController)
-│  └─ Selection (GameObject raiz)
-│     ├─ WorldPicker (Script)
-│     ├─ InputSelection (Script)
-│     ├─ SelectionManager (Script)
-│     ├─ DragRectRenderer (Script)
-│     └─ SelectionDebugListener (Script, opcional)
-│
-├─ LIGHTS
-│  ├─ Global Volume
-│  └─ Directional Light
-│
-├─ CAMERA
-│  ├─ Main Camera
-│  ├─ RTS_Camera (CM3)
-│  └─ RTS Camera Rig
-│
-├─ UI
-│  ├─ CanvasUI
-│  ├─ EventSystem
-│  └─ InputSelection (segundo GameObject, se necessário)
-│
-├─ TERRAIN
-│  └─ Terrain (Layer: Ground)
-│
-└─ UNITS
-   ├─ Worker
-   │  └─ HitProxy (UnitHitProxy + SphereCollider, Layer: Unit)
-   ├─ Archer
-   │  └─ HitProxy (UnitHitProxy + SphereCollider, Layer: Unit)
-   └─ ...
+┌─────────────────────────────────────────────────────┐
+│ Quad (Prefab Asset)                                 │
+├─────────────────────────────────────────────────────┤
+│ Transform                                           │
+│   Position: (127.24, 2.036, 48.852)                │
+│   Rotation: (90, 0, 0)                              │
+│   Scale: (1, 1, 1)                                  │
+│                                                     │
+│ Quad (Mesh Filter)                                  │
+│   Mesh: Quad                                        │
+│                                                     │
+│ Mesh Renderer                                       │
+│   Materials:                                        │
+│     Element 0: SelectionMaterial (Material)        │
+│                                                     │
+│ Lighting                                            │
+│   Cast Shadows: Off                                 │
+│   Contribute Global Illumination: Off               │
+└─────────────────────────────────────────────────────┘
 ```
 
-**Screenshot da Hierarquia Real:**
-![Hierarchy](reference://1761256567365_image.png)
+---
+
+#### **Componentes do Prefab:**
+
+**1. MeshFilter:**
+- Mesh: `Quad` (built-in Unity)
+
+**2. MeshRenderer:**
+- Material: `SelectionMaterial`
+- Cast Shadows: Off (performance)
+- Contribute GI: Off (performance)
+
+**3. Transform:**
+- Rotation: `(90, 0, 0)` (quad paralelo ao chão XZ)
+- Scale: `(1, 1, 1)` (scale será controlado por código)
 
 ---
 
-### 5.4 Configuração do GameObject "Selection"
+#### **Material - SelectionMaterial:**
 
-#### **Inspector Completo:**
+**Screenshot de Referência:**
+```
+┌─────────────────────────────────────────────────────┐
+│ SelectionMaterial (Material)                        │
+├─────────────────────────────────────────────────────┤
+│ Shader: Universal Render Pipeline/Lit              │
+│                                                     │
+│ Surface Options                                     │
+│   Rendering Mode: Transparent                       │
+│                                                     │
+│ Surface Inputs                                      │
+│   Base Color: Yellow (RGB: 255, 255, 0)            │
+│   Alpha: 0.3 (semi-transparente)                   │
+└─────────────────────────────────────────────────────┘
+```
 
-**Screenshot:**
-![Selection Inspector](reference://1761256573516_image.png)
+**Configuração:**
 
-#### **WorldPicker (Script):**
+| Propriedade | Valor |
+|-------------|-------|
+| Shader | Universal Render Pipeline/Lit |
+| Rendering Mode | Transparent |
+| Base Color | Yellow (255, 255, 0) |
+| Alpha | 0.3 (30% opaco) |
+| Cast Shadows | Off |
 
-| Field | Value | Description |
-|-------|-------|-------------|
-| **Cam** | `Main Camera (Camera)` | Arraste a Main Camera ou RTS Camera |
-| **Unit Mask** | `Unit` (Layer 3) | Selecione apenas Layer "Unit" |
-| **Ground Mask** | `Ground` (Layer 7) | Selecione apenas Layer "Ground" |
-
----
-
-#### **InputSelection (Script):**
-
-| Field | Value | Description |
-|-------|-------|-------------|
-| **Picker** | `Selection (World Picker)` | Referência ao WorldPicker no mesmo GameObject |
-| **Drag Threshold Px** | `6` | Distância mínima para drag (pixels) |
-| **Double Click Window** | `0.28` | Janela de tempo para double-click (segundos) |
-| **Point** | `Selection/Point (Input Action Reference)` | Arraste do InputActions asset |
-| **LMB** | `Selection/LMB (Input Action Reference)` | Arraste do InputActions asset |
-| **RMB** | `Selection/RMB (Input Action Reference)` | Arraste do InputActions asset |
-| **Ctrl** | `Selection/Ctrl (Input Action Reference)` | Arraste do InputActions asset |
-| **Shift** | `Selection/Shift (Input Action Reference)` | Arraste do InputActions asset |
-
-**Como Atribuir InputActionReference:**
-1. No Inspector, clique no círculo ao lado de "Point"
-2. Selecione "Selection/Point" da lista
-3. Repita para LMB, RMB, Ctrl, Shift
+**Variações:**
+- Azul semi-transparente para tema sci-fi
+- Verde para tema militar
+- Branco com borda para tema minimalista
 
 ---
 
-#### **SelectionManager (Script):**
+## 6) UNITHITPROXY - PROXY DE COLISÃO
 
-| Field | Value | Description |
-|-------|-------|-------------|
-| **Rect Inflate Px** | `1.5` | Margem extra no retângulo de drag |
-| **Player** | `PlayerSettings (Player Controller)` | Referência ao PlayerController |
-| **Cam** | `Main Camera (Camera)` | Mesma câmera do WorldPicker |
-| **Input** | `Selection (Input Selection)` | Referência ao InputSelection no mesmo GameObject |
-| **Only Own Units** | `☑ Checked` | Filtrar apenas unidades da facção do jogador |
+### 6.1 Visão Geral
 
----
+**Tipo:** `MonoBehaviour`  
+**Responsabilidade:** Facilitar detecção de `Unit` em hierarquias complexas.
 
-### 5.5 Prefab "Quad" (Retângulo de Drag)
+**Problema que resolve:**
+- Colisores podem estar em GameObjects filhos (armadura, modelo, etc.)
+- Raycast acerta o colisor filho, não o GameObject com `Unit`
+- `GetComponentInParent<Unit>()` resolve, mas é mais lento
 
-#### **Configuração do Prefab:**
+**Solução:**
+- `UnitHitProxy` referencia diretamente o `Unit`
+- Raycast acerta proxy → retorna `proxy.unit` (O(1))
 
-**Screenshot do Inspector:**
-![Quad Prefab](reference://1761255824463_image.png)
+### 6.2 Código Completo
 
-#### **Componentes:**
+```csharp
+[DisallowMultipleComponent]
+public class UnitHitProxy : MonoBehaviour
+{
+    public Unit unit;
 
-1. **Transform:**
-   - Position: `(127.24, 2.036, 48.852)` (será sobrescrito dinamicamente)
-   - Rotation: `(90, 0, 0)` (deitado no chão)
-   - Scale: `(1, 1, 1)` (será sobrescrito dinamicamente)
+    void Reset() => unit = GetComponentInParent<Unit>();
+}
+```
 
-2. **Quad (Mesh Filter):**
-   - Mesh: `Quad` (built-in do Unity)
-
-3. **Mesh Renderer:**
-   - Material: `SelectionMaterial`
-   - Cast Shadows: `Off`
-   - Receive Shadows: `Off` (opcional)
-
-#### **Material "SelectionMaterial":**
-
-| Property | Value |
-|----------|-------|
-| **Shader** | `Universal Render Pipeline/Lit` |
-| **Base Map** | None (cor sólida) |
-| **Base Color** | Amarelo semi-transparente |
-| **RGBA** | `(1, 1, 0, 0.3)` ou `#FFFF004D` |
-| **Surface Type** | Transparent |
-| **Rendering Mode** | Fade ou Transparent |
-| **Alpha Clipping** | Off |
-
-**Screenshot do Material:**
-![Selection Material](reference://1761255824463_image.png)
+**unit (Unit):**
+- **Descrição:** Referência ao componente `Unit` pai
+- **Auto-preenchido:** Via `Reset()` (Editor)
 
 ---
 
-### 5.6 Configuração de Prefab de Unidade (UnitHitProxy)
+### 6.3 Setup e Uso
 
-#### **Hierarquia do Prefab:**
+#### **Hierarquia Típica:**
 
 ```
-Worker (Prefab)
-├─ Unit (Script)
-├─ Armature (Modelo 3D)
+Worker (GameObject)
+├─ Unit (Script) ← Componente principal
+├─ Armature (Empty)
 │  ├─ Body (SkinnedMeshRenderer)
-│  └─ Animations...
-├─ SelectionRing (GameObject, ativado quando selecionado)
-└─ HitProxy (GameObject)
-   ├─ UnitHitProxy (Script)
-   └─ SphereCollider (Trigger)
+│  ├─ Arms (SkinnedMeshRenderer)
+│  └─ HitProxy (GameObject) ← Layer: Unit
+│     ├─ CapsuleCollider (Trigger)
+│     └─ UnitHitProxy (Script) ← unit = Worker.Unit
+└─ SelectionRing (GameObject)
 ```
 
-**Screenshot da Hierarquia:**
-![Unit Hierarchy](reference://1761256611570_image.png)
-
-#### **HitProxy (GameObject):**
-
-**Screenshot do Inspector:**
-![HitProxy Inspector](reference://1761256627835_image.png)
-
-| Component | Configuration |
-|-----------|--------------|
-| **Layer** | `Unit` (User Layer 3) |
-| **UnitHitProxy (Script)** | |
-| └─ Unit | `Worker (2) (Unit)` (auto-atribuído) |
-| **SphereCollider** | |
-| ├─ Is Trigger | `☑ Checked` |
-| ├─ Center | `(0, 0.95, 0)` (ajustar para altura da unidade) |
-| └─ Radius | `1.100337` (cobrir a unidade completamente) |
-
-#### **Passos para Adicionar em Prefab Existente:**
-
-1. Abra o prefab da unidade (ex: `Worker.prefab`)
-2. Clique direito na raiz → `Create Empty`
-3. Renomeie para "HitProxy"
-4. Configure Transform:
-   - Position: `(0, 0, 0)` (relativo à raiz)
-   - Rotation: `(0, 0, 0)`
-   - Scale: `(1, 1, 1)`
-5. Adicione componente `UnitHitProxy`:
-   - Clique em círculo de "Unit" → selecione `Worker (Unit)` (componente da raiz)
-6. Adicione componente `Sphere Collider`:
-   - `Is Trigger`: ✅ Checked
-   - `Center`: ajustar Y para metade da altura da unidade
-   - `Radius`: ajustar para cobrir a unidade (testar com Scene Gizmos)
-7. Altere Layer do GameObject "HitProxy" para **"Unit"**
-8. Salve o prefab
+**Setup:**
+1. Criar GameObject filho: `HitProxy`
+2. Adicionar Collider (Capsule, Box, etc.)
+   - **Is Trigger:** Checked (recomendado)
+   - **Layer:** Unit
+3. Adicionar `UnitHitProxy` script
+4. `Reset()` auto-preenche `unit` com `GetComponentInParent<Unit>()`
 
 ---
 
-### 5.7 Setup Passo-a-Passo Completo
+#### **Integração com WorldPicker:**
 
-#### **Checklist de Setup:**
-
-- [ ] **1. Configurar Layers:**
-  - [ ] User Layer 3 = "Unit"
-  - [ ] User Layer 7 = "Ground"
-
-- [ ] **2. Criar Input Actions Asset:**
-  - [ ] Action Map "Selection"
-  - [ ] Actions: Point, LMB, RMB, Ctrl, Shift
-  - [ ] Bindings configurados (ver seção 5.2)
-
-- [ ] **3. Criar Prefab "Quad":**
-  - [ ] Mesh: Quad (built-in)
-  - [ ] Material: Amarelo transparente
-  - [ ] Rotation: (90, 0, 0)
-
-- [ ] **4. Adicionar UnitHitProxy aos Prefabs de Unidades:**
-  - [ ] GameObject "HitProxy" em cada prefab
-  - [ ] UnitHitProxy (Script)
-  - [ ] SphereCollider (Trigger, Layer: Unit)
-
-- [ ] **5. Criar GameObject "Selection" na Cena:**
-  - [ ] Adicionar WorldPicker
-  - [ ] Adicionar InputSelection
-  - [ ] Adicionar SelectionManager
-  - [ ] Adicionar DragRectRenderer (opcional)
-
-- [ ] **6. Configurar Referências (Inspector):**
-  - [ ] WorldPicker: cam, unitMask, groundMask
-  - [ ] InputSelection: picker, InputActionReferences
-  - [ ] SelectionManager: player, cam, input
-  - [ ] DragRectRenderer: input, cam, quadPrefab
-
-- [ ] **7. Configurar Terrain:**
-  - [ ] Layer do Terrain = "Ground"
-
-- [ ] **8. Testar:**
-  - [ ] Clique simples seleciona unidade
-  - [ ] Drag seleciona múltiplas
-  - [ ] Duplo-clique seleciona todas do tipo
-  - [ ] Ctrl adiciona/toggle
-  - [ ] Clique em UI não afeta seleção
-
----
-
-## 6) CASOS DE USO PRÁTICOS
-
-### 6.1 Seleção Simples (Clique)
-
-**Comportamento:**
-- Jogador clica com LMB em uma unidade
-- Seleção anterior é limpa
-- Unidade clicada fica selecionada
-- `selectionHighlight` é ativado
-
-**Código Interno (SelectionManager):**
-
+**Sem Proxy:**
 ```csharp
-void HandleClickUnit(Unit unit, bool ctrl) {
-    // Filtro: só selecionar unidades próprias
-    if (onlyOwnUnits && unit.owner != player.myFaction) return;
-
-    if (ctrl) {
-        // Ctrl: toggle
-        Toggle(unit);
-    } else {
-        // Clique normal: substituir seleção
-        Clear();
-        Add(unit);
-    }
-
-    FireChanged(); // Dispara OnSelectionChanged
-}
+// WorldPicker.TryPickUnitAt() - LENTO
+unit = hit.collider.GetComponentInParent<Unit>(); // ❌ Busca em hierarquia
 ```
 
-**Teste:**
-1. Execute a cena
-2. Clique em uma unidade (ex: Worker)
-3. Verifique que `selectionHighlight` ficou visível
-4. Clique em outra unidade
-5. Primeira unidade deve desselecionar automaticamente
-
----
-
-### 6.2 Seleção Aditiva (Ctrl + Clique)
-
-**Comportamento:**
-- Jogador segura Ctrl e clica em unidade
-- Seleção anterior **não é limpa**
-- Unidade clicada é **adicionada** (ou removida se já estava selecionada - toggle)
-
-**Código:**
-
+**Com Proxy:**
 ```csharp
-void Toggle(Unit u) {
-    if (_selection.Contains(u)) {
-        Remove(u); // Remove se já estava
-    } else {
-        Add(u);    // Adiciona se não estava
-    }
-}
+// WorldPicker.TryPickUnitAt() - RÁPIDO
+var proxy = hit.collider.GetComponent<UnitHitProxy>();
+unit = proxy != null ? proxy.unit : hit.collider.GetComponentInParent<Unit>();
+// ✅ Se tem proxy, acesso direto O(1)
+// ⚠️ Fallback para GetComponentInParent se não tiver proxy
 ```
-
-**Teste:**
-1. Selecione Worker (1)
-2. Segure Ctrl e clique em Worker (2)
-3. Ambos devem estar selecionados
-4. Segure Ctrl e clique em Worker (1) novamente
-5. Worker (1) deve desselecionar (toggle)
-
----
-
-### 6.3 Seleção por Arrasto (Drag)
-
-**Comportamento:**
-- Jogador clica, arrasta > 6px e solta LMB
-- Todas unidades dentro do retângulo 3D são selecionadas
-- Retângulo amarelo é desenhado durante o drag
-
-**Fluxo:**
-
-1. **OnBeginDrag** (quando arrasta > 6px):
-   ```csharp
-   void OnBeginDragHandler(Vector2 startScreenPos) {
-       if (Physics.Raycast(cam.ScreenPointToRay(startScreenPos), out var hit))
-           _dragStartWorld = hit.point; // Armazena posição 3D inicial
-   }
-   ```
-
-2. **OnDragging** (contínuo):
-   - `DragRectRenderer` atualiza visual do quad
-
-3. **OnEndDrag** (quando solta LMB):
-   ```csharp
-   void HandleEndDrag(Vector2 endScreenPos) {
-       bool ctrl = input.IsCtrlPressed;
-       Vector3 endWorld = /* converte endScreenPos para 3D */;
-       SelectByWorldRect(_dragStartWorld, endWorld, additive: ctrl);
-       FireChanged();
-   }
-   ```
-
-4. **SelectByWorldRect** (interno):
-   ```csharp
-   void SelectByWorldRect(Vector3 a, Vector3 b, bool additive) {
-       if (!additive) Clear(); // Limpa se não for Ctrl
-
-       // Criar bounds 3D (XZ, Y ignorado)
-       var min = Vector3.Min(a, b);
-       var max = Vector3.Max(a, b);
-       var bounds = new Bounds();
-       bounds.SetMinMax(
-           new Vector3(min.x, float.MinValue, min.z),
-           new Vector3(max.x, float.MaxValue, max.z)
-       );
-
-       // Testar unidades da facção do jogador
-       var mine = UnitRegistry.GetByFaction(player.myFaction);
-       foreach (var u in mine) {
-           if (bounds.Contains(new Vector3(u.transform.position.x, 0f, u.transform.position.z))) {
-               Add(u);
-           }
-       }
-   }
-   ```
-
-**Teste:**
-1. Clique e arraste sobre múltiplas unidades
-2. Retângulo amarelo deve aparecer e crescer
-3. Ao soltar, unidades dentro do retângulo devem ficar selecionadas
-4. Teste com Ctrl para seleção aditiva
-
-**Screenshot do Retângulo:**
-![Drag Selection Visual](reference://1761255948847_image.png)
-
----
-
-### 6.4 Duplo-Clique (Selecionar Todas do Tipo)
-
-**Comportamento:**
-- Jogador duplo-clica em uma unidade (< 280ms entre cliques)
-- Todas unidades do **mesmo tipo** (mesmo `UnitDefinition`) **visíveis na tela** são selecionadas
-
-**Código:**
-
-```csharp
-void HandleDoubleClickUnit(Unit unit) {
-    // Filtro: só unidades próprias
-    if (onlyOwnUnits && unit.owner != player.myFaction) return;
-
-    Clear();
-
-    // Buscar todas unidades da facção do jogador
-    var mine = UnitRegistry.GetByFaction(player.myFaction);
-    foreach (var u in mine) {
-        // Filtro 1: Visível na tela
-        if (!IsOnScreen(u.transform.position)) continue;
-        
-        // Filtro 2: Mesmo UnitDefinition
-        if (u.def == unit.def) {
-            Add(u);
-        }
-    }
-
-    FireChanged();
-}
-```
-
-**Helper (Verificar se está na tela):**
-
-```csharp
-bool IsOnScreen(Vector3 worldPos) {
-    var sp = cam.WorldToScreenPoint(worldPos);
-    return sp.z > 0 && 
-           sp.x >= 0 && sp.x <= Screen.width &&
-           sp.y >= 0 && sp.y <= Screen.height;
-}
-```
-
-**Teste:**
-1. Distribua vários Workers e Archers pela tela
-2. Duplo-clique em um Worker
-3. Todos Workers **visíveis** devem ser selecionados
-4. Archers não devem ser afetados
-5. Mova câmera para revelar Workers fora da tela inicial
-6. Duplo-clique novamente: Workers fora da tela **não** são selecionados
-
-**Nota:** Se quiser selecionar **todos** do tipo (mesmo fora da tela), remova a verificação `IsOnScreen()`.
-
----
-
-### 6.5 Proteção de UI (Não Selecionar ao Clicar em Botões)
-
-**Problema:**
-- Jogador clica em botão da UI
-- Input também detecta clique "no mundo"
-- Unidade atrás do botão é selecionada acidentalmente
-
-**Solução:**
-
-`InputSelection` usa `EventSystem.IsPointerOverGameObject()` para filtrar cliques sobre UI.
-
-**Implementação:**
-
-```csharp
-void OnLmbStarted(InputAction.CallbackContext _) {
-    _lmbDown = true;
-    _downPos = _pointer;
-
-    // CRÍTICO: Marcar se começou sobre UI
-    _pressedOverUI = IsPointerOverUI();
-    _dragging = false;
-
-    if (!_pressedOverUI)
-        OnPointerDown?.Invoke(_downPos);
-}
-
-void OnLmbCanceled(InputAction.CallbackContext _) {
-    if (_pressedOverUI) {
-        // Ignorar: clique começou em UI
-        _pressedOverUI = false;
-        _lmbDown = false;
-        return;
-    }
-
-    // Processar clique normalmente
-    if (_dragging) OnEndDrag?.Invoke(_pointer);
-    else HandleClick(_pointer);
-}
-
-bool IsPointerOverUI() => _overUIThisFrame;
-
-bool ComputePointerOverUI() {
-    if (EventSystem.current == null) return false;
-
-    // Input System novo: passar deviceId
-    if (Mouse.current != null)
-        return EventSystem.current.IsPointerOverGameObject(Mouse.current.deviceId);
-
-    // Fallback (toque)
-    if (Touchscreen.current != null) {
-        foreach (var t in Touchscreen.current.touches)
-            if (t.isInProgress && EventSystem.current.IsPointerOverGameObject(t.touchId.ReadValue()))
-                return true;
-    }
-
-    return EventSystem.current.IsPointerOverGameObject();
-}
-```
-
-**Teste:**
-1. Crie um botão na UI (Canvas)
-2. Clique no botão
-3. Unidades atrás do botão **não devem** ser selecionadas
-4. Clique fora da UI
-5. Unidades **devem** ser selecionadas normalmente
-
----
-
-### 6.6 Integração com UI de Lista de Unidades
-
-**Cenário:**
-- Painel lateral mostra lista de unidades selecionadas
-- Ao selecionar no mundo, lista atualiza
-- Ao clicar na lista, unidade é focada (câmera)
-
-**Código de UI (Exemplo Simplificado):**
-
-```csharp
-public class UnitListUI : MonoBehaviour {
-    [SerializeField] SelectionManager selectionManager;
-    [SerializeField] Transform listContainer;
-    [SerializeField] GameObject listItemPrefab; // UnitListItemUI
-
-    List<UnitListItemUI> items = new List<UnitListItemUI>();
-
-    void OnEnable() {
-        selectionManager.OnSelectionChanged += UpdateList;
-    }
-
-    void OnDisable() {
-        selectionManager.OnSelectionChanged -= UpdateList;
-    }
-
-    void UpdateList(IReadOnlyCollection<Unit> selectedUnits) {
-        // Limpar itens antigos
-        foreach (var item in items) Destroy(item.gameObject);
-        items.Clear();
-
-        // Criar novos itens
-        foreach (var unit in selectedUnits) {
-            var itemGO = Instantiate(listItemPrefab, listContainer);
-            var item = itemGO.GetComponent<UnitListItemUI>();
-            item.Bind(unit);
-            items.Add(item);
-        }
-    }
-}
-```
-
-**UnitListItemUI (Fornecido):**
-
-```csharp
-public class UnitListItemUI : MonoBehaviour {
-    public Image portrait;
-    public TMP_Text nameText;
-    public TMP_Text levelText;
-    public Image barFill;    // Barra de XP (90%)
-    public Image circleFill; // Círculo de XP (10%)
-    public Outline outline;  // Visual de seleção
-
-    Unit _unit;
-
-    public void Bind(Unit unit) {
-        // Desinscrever do GameEvents se já estava inscrito
-        if (_unit != null) {
-            GameEvents.OnUnitProgressChanged -= OnUnitProgressChanged;
-        }
-
-        _unit = unit;
-        nameText.text = unit.DisplayName;
-        portrait.sprite = unit.def ? unit.def.icon : null;
-
-        Refresh();
-
-        // Inscrever no GameEvents
-        GameEvents.OnUnitProgressChanged += OnUnitProgressChanged;
-    }
-
-    void OnUnitProgressChanged(Unit changedUnit) {
-        // Só atualizar se for a unidade vinculada
-        if (changedUnit == _unit) {
-            Refresh();
-        }
-    }
-
-    void Refresh() {
-        if (_unit == null) return;
-        levelText.text = _unit.Level.ToString();
-        
-        float t = _unit.Xp01;
-        barFill.fillAmount = Mathf.Min(t, 0.9f) / 0.9f;
-        circleFill.fillAmount = (t <= 0.9f) ? 0f : (t - 0.9f) / 0.1f;
-    }
-
-    public void SetSelected(bool selected) {
-        if (outline) outline.enabled = selected;
-    }
-}
-```
-
----
-
-## 7) INTEGRAÇÃO COM UI
-
-### 7.1 UnitListItemUI (Classe Fornecida)
-
-**Responsabilidade:** Exibir informações de uma unidade na UI (portrait, nome, level, barra de XP).
-
-**Componentes:**
-- **Portrait (Image)**: Ícone da unidade (`unit.def.icon`)
-- **Name Text (TMP_Text)**: Nome (`unit.DisplayName`)
-- **Level Text (TMP_Text)**: Nível (`unit.Level`)
-- **Bar Fill (Image)**: Barra de XP (90% do progresso)
-- **Circle Fill (Image)**: Círculo de XP (últimos 10%)
-- **Outline**: Indicador visual de seleção
-
-**Integração com GameEvents:**
-
-```csharp
-public void Bind(Unit unit) {
-    // Limpar inscrição anterior
-    if (_unit != null) {
-        GameEvents.OnUnitProgressChanged -= OnUnitProgressChanged;
-    }
-
-    _unit = unit;
-    
-    // Atualizar dados iniciais
-    nameText.text = unit.DisplayName;
-    portrait.sprite = unit.def?.icon;
-    Refresh();
-
-    // Inscrever para receber atualizações de XP/Level
-    GameEvents.OnUnitProgressChanged += OnUnitProgressChanged;
-}
-
-void OnUnitProgressChanged(Unit changedUnit) {
-    // Filtrar: só atualizar se for a unidade vinculada
-    if (changedUnit == _unit) {
-        Refresh();
-    }
-}
-
-void Refresh() {
-    levelText.text = _unit.Level.ToString();
-    
-    // Barra: 0-90% = progresso linear
-    // Círculo: 90-100% = progresso do círculo
-    float t = _unit.Xp01;
-    barFill.fillAmount = Mathf.Min(t, 0.9f) / 0.9f;
-    circleFill.fillAmount = (t <= 0.9f) ? 0f : (t - 0.9f) / 0.1f;
-}
-```
-
-**Nota sobre Refatoração:**
-- ✅ Código já usa `GameEvents.OnUnitProgressChanged` (consistente com módulos anteriores)
-- ❌ `SelectionManager.OnSelectionChanged` ainda não usa GameEvents (pendente refatoração)
-
----
-
-## 8) TROUBLESHOOTING
-
-### 8.1 "Clique não seleciona unidade"
-
-**Possíveis Causas:**
-
-1. **Layer incorreta:**
-   - Verifique que `HitProxy` tem Layer "Unit"
-   - Verifique que `WorldPicker.unitMask` inclui Layer "Unit"
-
-2. **Collider não configurado:**
-   - `HitProxy` deve ter `SphereCollider` com `Is Trigger = true`
-   - Radius do collider deve cobrir a unidade
-
-3. **UnitHitProxy.unit não atribuído:**
-   - No Inspector do `HitProxy`, verifique que campo "Unit" aponta para o componente `Unit` da raiz
-
-4. **InputActionReference não conectado:**
-   - No Inspector do `InputSelection`, verifique que todos os campos (point, lmb, rmb, ctrl, shift) estão preenchidos
-
-**Debug:**
-
-```csharp
-// Adicione log em WorldPicker.TryPickUnitAt():
-if (Physics.Raycast(ray, out var hit, maxDistance, unitMask, QueryTriggerInteraction.Collide)) {
-    Debug.Log($"Raycast acertou: {hit.collider.name} (Layer: {hit.collider.gameObject.layer})");
-    unit = hit.collider.GetComponentInParent<Unit>();
-    if (unit == null) {
-        Debug.LogError("Acertou collider mas não achou Unit!");
-    }
-    return unit != null;
-}
-```
-
----
-
-### 8.2 "Drag não seleciona nada"
-
-**Possíveis Causas:**
-
-1. **Threshold muito alto:**
-   - `InputSelection.dragThresholdPx = 6` pode ser muito para toque
-   - Teste com valor menor (3-4px)
-
-2. **Terrain sem Layer "Ground":**
-   - `DragRectRenderer` precisa de raycast para converter tela→mundo
-   - Verifique que Terrain tem Layer "Ground"
-
-3. **SelectByWorldRect não encontra unidades:**
-   - Verifique que `player.myFaction` corresponde ao `unit.owner`
-   - Adicione logs:
-
-```csharp
-void SelectByWorldRect(Vector3 a, Vector3 b, bool additive) {
-    Debug.Log($"SelectByWorldRect: {a} → {b}, additive={additive}");
-    
-    var mine = UnitRegistry.GetByFaction(player.myFaction);
-    Debug.Log($"Unidades da facção {player.myFaction}: {mine.Count}");
-    
-    foreach (var u in mine) {
-        bool inside = bounds.Contains(new Vector3(u.transform.position.x, 0f, u.transform.position.z));
-        Debug.Log($"  {u.DisplayName}: {u.transform.position} → inside={inside}");
-        if (inside) Add(u);
-    }
-}
-```
-
----
-
-### 8.3 "Duplo-clique não funciona"
-
-**Possíveis Causas:**
-
-1. **Janela muito curta:**
-   - `doubleClickWindow = 0.28` pode ser muito rápido
-   - Teste com 0.4-0.5s
-
-2. **Cliques acertam unidades diferentes:**
-   - Duplo-clique precisa acertar **mesma unidade** duas vezes
-   - Verifique com logs:
-
-```csharp
-void HandleClick(Vector2 screenPos) {
-    if (picker.TryPickUnitAt(screenPos, out var unit)) {
-        float timeSinceLastClick = Time.unscaledTime - _lastClickTime;
-        bool sameUnit = unit == _lastClickedUnit;
-        
-        Debug.Log($"Clique: {unit.DisplayName}, tempo={timeSinceLastClick:F3}s, mesma={sameUnit}");
-        
-        if (sameUnit && timeSinceLastClick <= doubleClickWindow) {
-            Debug.Log("→ DUPLO CLIQUE!");
-            OnDoubleClickUnit?.Invoke(unit);
-            // ...
-        }
-    }
-}
-```
-
----
-
-### 8.4 "Clique em UI seleciona unidades"
-
-**Causa:**
-- `EventSystem` não detecta UI corretamente
-- `InputSelection._pressedOverUI` não funciona
-
-**Solução:**
-
-1. **Verificar EventSystem na cena:**
-   - Hierarchy deve ter GameObject `EventSystem`
-   - Componente `EventSystem` deve estar ativo
-
-2. **Verificar Raycaster no Canvas:**
-   - Canvas deve ter componente `GraphicRaycaster`
-   - Se Canvas está em World Space, precisa de `PhysicsRaycaster` na câmera
-
-3. **Testar detecção de UI:**
-
-```csharp
-// Adicione log em InputSelection.OnLmbStarted():
-void OnLmbStarted(InputAction.CallbackContext _) {
-    _pressedOverUI = IsPointerOverUI();
-    Debug.Log($"LMB Down: overUI={_pressedOverUI}");
-    // ...
-}
-```
-
----
-
-### 8.5 "Retângulo de drag não aparece"
-
-**Possíveis Causas:**
-
-1. **Prefab não atribuído:**
-   - Verifique que `DragRectRenderer.quadPrefab` está preenchido no Inspector
-
-2. **Material invisível:**
-   - Verifique que material tem cor visível (alfa > 0)
-   - Shader deve suportar transparência
-
-3. **Quad fora da tela:**
-   - Verifique Y do quad (deve estar próximo de Y=0 do terreno)
-   - Adicione logs:
-
-```csharp
-void BeginRect(Vector2 screenStart) {
-    if (Physics.Raycast(cam.ScreenPointToRay(screenStart), out var hit)) {
-        _startWorld = hit.point;
-        Debug.Log($"Drag start: {_startWorld}");
-        _activeQuad = Instantiate(quadPrefab);
-        _activeQuad.transform.position = _startWorld;
-        Debug.Log($"Quad instanciado em: {_activeQuad.transform.position}");
-    }
-}
-```
-
----
-
-### 8.6 "Unidades de outras facções são selecionadas"
-
-**Causa:**
-- `SelectionManager.onlyOwnUnits = false` no Inspector
-
-**Solução:**
-1. Selecione GameObject "Selection" na Hierarchy
-2. No Inspector, localize `SelectionManager (Script)`
-3. Marque checkbox `Only Own Units`
-
----
-
-## 9) SUGESTÕES DE REFATORAÇÃO
-
-### 9.1 Migrar `OnSelectionChanged` para `GameEvents`
-
-**Problema Atual:**
-- `SelectionManager.OnSelectionChanged` é um evento **local**
-- Inconsistente com outros módulos (Câmera, Unit, Factions usam `GameEvents`)
-- UI precisa de referência direta ao `SelectionManager`
-
-**Proposta de Refatoração:**
-
-#### **Passo 1: Adicionar Evento em `GameEvents.cs`**
-
-```csharp
-// GameEvents.cs
-public static class GameEvents {
-    // ... outros eventos ...
-
-    // ===== SELEÇÃO =====
-    /// <summary>
-    /// Disparado quando seleção de unidades muda.
-    /// Disparado por: SelectionManager.FireChanged()
-    /// </summary>
-    public static event Action<IReadOnlyCollection<Unit>> OnSelectionChanged;
-
-    /// <summary>
-    /// Helper para disparar evento de mudança de seleção.
-    /// </summary>
-    /// <param name="selectedUnits">Coleção de unidades selecionadas</param>
-    public static void RaiseSelectionChanged(IReadOnlyCollection<Unit> selectedUnits) {
-        OnSelectionChanged?.Invoke(selectedUnits);
-    }
-}
-```
-
-#### **Passo 2: Refatorar `SelectionManager.cs`**
-
-```csharp
-// SelectionManager.cs
-public class SelectionManager : MonoBehaviour {
-    // ... campos existentes ...
-
-    // REMOVER: Evento local
-    // public event Action<IReadOnlyCollection<Unit>> OnSelectionChanged;
-
-    // ... métodos existentes ...
-
-    void FireChanged() {
-        // ANTES: OnSelectionChanged?.Invoke(_selection);
-        // DEPOIS:
-        GameEvents.RaiseSelectionChanged(_selection);
-    }
-}
-```
-
-#### **Passo 3: Atualizar Consumers (UI, etc.)**
-
-```csharp
-// UnitListUI.cs (ANTES)
-void OnEnable() {
-    selectionManager.OnSelectionChanged += UpdateList; // ❌ Precisa de referência
-}
-
-// UnitListUI.cs (DEPOIS)
-void OnEnable() {
-    GameEvents.OnSelectionChanged += UpdateList; // ✅ Desacoplado
-}
-
-void OnDisable() {
-    GameEvents.OnSelectionChanged -= UpdateList; // CRÍTICO: sempre desinscrever
-}
-```
-
-**Benefícios:**
-- ✅ Consistência com arquitetura do projeto
-- ✅ UI não precisa de referência ao `SelectionManager`
-- ✅ Múltiplos sistemas podem escutar (Minimap, Audio, IA)
-- ✅ Facilita testes unitários (mock de `GameEvents`)
-
----
-
-### 9.2 Remover Variável `_rangeAnchor` (Não Utilizada)
-
-**Problema:**
-- Campo `_rangeAnchor` é atribuído mas nunca lido
-- Parece ser implementação incompleta de "shift-click range selection"
 
 **Código Atual:**
+- WorldPicker **usa apenas** `GetComponentInParent<Unit>()`
+- **Melhoria futura:** Adicionar suporte a `UnitHitProxy` para otimização
 
-```csharp
-Unit _rangeAnchor; // ← Atribuído em vários lugares, nunca usado
+---
 
-void HandleClickUnit(Unit unit, bool ctrl) {
-    // ...
-    _rangeAnchor = unit; // ← Atribuído aqui
-}
+### 6.4 Quando Usar
 
-void HandleDoubleClickUnit(Unit unit) {
-    // ...
-    _rangeAnchor = unit; // ← E aqui
-}
+**Use UnitHitProxy quando:**
+- ✅ Hierarquia complexa (armature, múltiplos meshes)
+- ✅ Performance crítica (centenas de raycasts/frame)
+- ✅ Colisores em GameObjects filhos distantes
 
-public void ClearAnchor() => _rangeAnchor = null; // ← Método público, nunca chamado
+**Não precisa quando:**
+- ❌ Colisor está no mesmo GameObject que `Unit`
+- ❌ Performance não é problema
+- ❌ Hierarquia simples
+
+---
+
+## 7) FLUXO DE SELEÇÃO COMPLETO
+
+### 7.1 Clique Simples (Unit)
+
 ```
-
-**Proposta:**
-
-**Opção A: Remover completamente** (se não for usado no futuro próximo)
-
-```csharp
-// Deletar:
-Unit _rangeAnchor;
-public void ClearAnchor() => _rangeAnchor = null;
-
-// Remover atribuições:
-void HandleClickUnit(Unit unit, bool ctrl) {
-    // ... código existente ...
-    // _rangeAnchor = unit; ← DELETAR
-}
-```
-
-**Opção B: Implementar funcionalidade de Shift-Click** (se for necessário)
-
-Funcionalidade pretendida: Shift+Click seleciona **range** entre âncora e unidade clicada.
-
-```csharp
-void HandleClickUnit(Unit unit, bool ctrl, bool shift) {
-    if (onlyOwnUnits && unit.owner != player.myFaction) return;
-
-    if (shift && _rangeAnchor != null) {
-        // Selecionar todas unidades entre âncora e unidade clicada
-        SelectRange(_rangeAnchor, unit);
-    } else if (ctrl) {
-        Toggle(unit);
-    } else {
-        Clear();
-        Add(unit);
-        _rangeAnchor = unit; // Atualizar âncora apenas em clique normal
-    }
-
-    FireChanged();
-}
-
-void SelectRange(Unit from, Unit to) {
-    // Implementação: buscar unidades em linha ou em área entre from e to
-    // Exemplo: todas unidades em lista entre índices de from e to
-}
-```
-
-**Recomendação:**
-- Se funcionalidade de range não é prioritária: **Remover completamente**
-- Se é funcionalidade futura: **Adicionar comentário TODO**
-
-```csharp
-// TODO: Implementar Shift-Click range selection
-// Unit _rangeAnchor; // Âncora para seleção por range (shift-click)
+Jogador clica em unidade (LMB)
+       │
+       ▼
+InputSelection.OnLmbStarted()
+       │
+       │ GameEvents.RaisePointerDown(screenPos)
+       ▼
+InputSelection.OnLmbCanceled()
+       │
+       │ Distance < threshold → Clique simples
+       ▼
+InputSelection.HandleClick(screenPos)
+       │
+       │ picker.TryPickUnitAt(screenPos, out unit)
+       │ → Acertou!
+       │
+       │ GameEvents.RaiseUnitClick(unit, ctrl=false)
+       ▼
+SelectionManager.HandleClickUnit(unit, ctrl=false)
+       │
+       │ onlyOwnUnits && unit.owner != player.myFaction → return
+       │ ctrl = false → Clear() + Add(unit)
+       │
+       ├──▶ Clear()
+       │    └──▶ foreach u: u.SetSelected(false)
+       │
+       ├──▶ Add(unit)
+       │    └──▶ unit.SetSelected(true)
+       │         └──▶ GameEvents.RaiseUnitSelectionChanged(unit, true)
+       │
+       │ GameEvents.RaiseSelectionChanged(_selection)
+       ▼
+UI Systems escutam OnSelectionChanged
+       │
+       ├──▶ UnitListUI: Reconstruir lista
+       ├──▶ SelectionInfoPanel: Mostrar info
+       └──▶ AudioManager: Som de seleção
 ```
 
 ---
 
-### 9.3 Adicionar Documentação XML em Métodos Públicos
+### 7.2 Clique com Ctrl (Toggle)
 
-**Problema:**
-- Métodos públicos de `SelectionManager` não têm comentários XML
-- Dificulta IntelliSense e compreensão de API
+```
+Jogador clica em unidade (Ctrl+LMB)
+       │
+       ▼
+InputSelection.HandleClick(screenPos)
+       │
+       │ isCtrl = input.IsCtrlPressed = true
+       │ GameEvents.RaiseUnitClick(unit, ctrl=true)
+       ▼
+SelectionManager.HandleClickUnit(unit, ctrl=true)
+       │
+       │ ctrl = true → Toggle(unit)
+       ▼
+Toggle(unit)
+       │
+       ├──▶ if _selection.Contains(unit):
+       │    └──▶ Remove(unit)
+       │         └──▶ unit.SetSelected(false)
+       │
+       └──▶ else:
+            └──▶ Add(unit)
+                 └──▶ unit.SetSelected(true)
+```
 
-**Proposta:**
+**Exemplo:**
+```
+Selection = {Worker1, Worker2}
 
-```csharp
-/// <summary>
-/// Verifica se uma unidade está atualmente selecionada.
-/// </summary>
-/// <param name="u">Unidade para verificar</param>
-/// <returns>True se a unidade está na seleção atual</returns>
-public bool IsSelected(Unit u) => u != null && _selection.Contains(u);
+Ctrl+Clique em Worker3:
+  → Add(Worker3) → Selection = {Worker1, Worker2, Worker3}
 
-/// <summary>
-/// Limpa a seleção atual e seleciona exatamente as unidades fornecidas.
-/// Dispara GameEvents.OnSelectionChanged.
-/// </summary>
-/// <param name="units">Coleção de unidades para selecionar. Null ou vazio limpa a seleção.</param>
-public void SelectExactly(IEnumerable<Unit> units) { ... }
-
-/// <summary>
-/// Limpa a seleção atual e seleciona exatamente uma unidade.
-/// Dispara GameEvents.OnSelectionChanged.
-/// </summary>
-/// <param name="u">Unidade para selecionar. Se null, apenas limpa a seleção.</param>
-public void SelectExactly(Unit u) { ... }
-
-/// <summary>
-/// Alterna o estado de seleção (toggle) para cada unidade fornecida.
-/// Se a unidade está selecionada, remove. Se não está, adiciona.
-/// Dispara GameEvents.OnSelectionChanged.
-/// </summary>
-/// <param name="units">Coleção de unidades para alternar</param>
-public void ToggleSet(IEnumerable<Unit> units) { ... }
-
-/// <summary>
-/// Adiciona unidades à seleção atual (união) sem limpar existentes.
-/// Útil para seleção aditiva programática (ex: UI de lista).
-/// Dispara GameEvents.OnSelectionChanged apenas se houver mudanças.
-/// </summary>
-/// <param name="units">Coleção de unidades para adicionar</param>
-public void AddToSelection(IEnumerable<Unit> units) { ... }
+Ctrl+Clique em Worker2:
+  → Remove(Worker2) → Selection = {Worker1, Worker3}
 ```
 
 ---
 
-### 9.4 Validação de Referências em `Awake()`
+### 7.3 Clique no Chão (Clear)
 
-**Problema:**
-- Se referências não forem atribuídas no Inspector, sistema falha silenciosamente
-- Difícil debugar erros de configuração
-
-**Proposta:**
-
-```csharp
-// SelectionManager.cs
-void Awake() {
-    ValidateReferences();
-}
-
-void ValidateReferences() {
-    bool hasErrors = false;
-
-    if (player == null) {
-        Debug.LogError("[SelectionManager] PlayerController não atribuído!", this);
-        hasErrors = true;
-    }
-
-    if (cam == null) {
-        Debug.LogWarning("[SelectionManager] Camera não atribuída. Tentando usar Camera.main...", this);
-        cam = Camera.main;
-        if (cam == null) {
-            Debug.LogError("[SelectionManager] Camera não encontrada!", this);
-            hasErrors = true;
-        }
-    }
-
-    if (input == null) {
-        Debug.LogWarning("[SelectionManager] InputSelection não atribuído. Tentando GetComponent...", this);
-        input = GetComponent<InputSelection>();
-        if (input == null) {
-            Debug.LogError("[SelectionManager] InputSelection não encontrado!", this);
-            hasErrors = true;
-        }
-    }
-
-    if (hasErrors) {
-        Debug.LogError("[SelectionManager] Configuração inválida. Sistema pode não funcionar corretamente.", this);
-        enabled = false; // Desabilitar componente para evitar NullReferenceExceptions
-    }
-}
 ```
-
-**Aplicar também em:**
-- `InputSelection` (validar `picker`)
-- `WorldPicker` (validar `cam`)
-- `DragRectRenderer` (validar `input`, `cam`, `quadPrefab`)
+Jogador clica no chão (LMB)
+       │
+       ▼
+InputSelection.HandleClick(screenPos)
+       │
+       │ picker.TryPickUnitAt() → false (não acertou unidade)
+       │ picker.TryPickGroundAt() → true (acertou chão)
+       │
+       │ GameEvents.RaiseGroundClick(worldPos, ctrl)
+       ▼
+SelectionManager.HandleClickGround(worldPos, ctrl)
+       │
+       │ Clear()
+       │ GameEvents.RaiseSelectionChanged(_selection)
+       ▼
+UI Systems escutam OnSelectionChanged
+       │
+       └──▶ Selection = {} (vazia)
+```
 
 ---
 
-### 9.5 Otimização de `SelectByWorldRect`
+### 7.4 Drag Rect (Múltipla Seleção)
 
-**Problema Atual:**
-- Usa `Bounds.Contains()` que testa inclusão em 3D (X, Y, Z)
-- Y é ignorado, mas ainda testado (ineficiente)
-
-**Proposta: Usar Rect2D (XZ)**
-
-```csharp
-void SelectByWorldRect(Vector3 a, Vector3 b, bool additive) {
-    if (!additive) Clear();
-
-    // Criar Rect2D (XZ)
-    float minX = Mathf.Min(a.x, b.x);
-    float maxX = Mathf.Max(a.x, b.x);
-    float minZ = Mathf.Min(a.z, b.z);
-    float maxZ = Mathf.Max(a.z, b.z);
-
-    var mine = UnitRegistry.GetByFaction(player.myFaction);
-    for (int i = 0; i < mine.Count; i++) {
-        var u = mine[i];
-        Vector3 pos = u.transform.position;
-        
-        // Teste 2D (mais rápido que Bounds.Contains)
-        if (pos.x >= minX && pos.x <= maxX &&
-            pos.z >= minZ && pos.z <= maxZ) {
-            Add(u);
-        }
-    }
-}
+```
+Jogador arrasta LMB
+       │
+       ▼
+InputSelection.OnLmbStarted()
+       │
+       │ _lmbDown = true, _downPos = pointer
+       ▼
+InputSelection.Update()
+       │
+       │ Distance(_downPos, _pointer) >= 6px
+       │ → _dragging = true
+       │
+       │ GameEvents.RaiseDragBegin(_downPos)
+       ▼
+SelectionManager.OnBeginDragHandler(_downPos)
+       │
+       │ Raycast → _dragStartWorld
+       ▼
+DragRectRenderer.BeginRect(_downPos)
+       │
+       │ Instantiate(quadPrefab) → _activeQuad
+       ▼
+InputSelection.OnPointPerformed() [loop]
+       │
+       │ GameEvents.RaiseDragging(_pointer)
+       ▼
+DragRectRenderer.UpdateRect(_pointer) [loop]
+       │
+       │ Atualizar position/scale do quad
+       ▼
+InputSelection.OnLmbCanceled()
+       │
+       │ _dragging = true → GameEvents.RaiseDragEnd(upPos)
+       ▼
+SelectionManager.HandleEndDrag(upPos)
+       │
+       │ Raycast → endWorld
+       │ SelectByWorldRect(_dragStartWorld, endWorld, additive: ctrl)
+       │
+       ├──▶ Criar Bounds 3D (retângulo XZ, Y infinito)
+       │
+       ├──▶ Para cada unidade da facção:
+       │    └──▶ if bounds.Contains(pos.xz): Add(unit)
+       │
+       │ GameEvents.RaiseSelectionChanged(_selection)
+       ▼
+DragRectRenderer.EndRect(upPos)
+       │
+       │ Destroy(_activeQuad)
+       ▼
+UI Systems atualizam
 ```
 
-**Benefício:**
-- ~10-15% mais rápido em seleções com 100+ unidades
-- Código mais claro (intenção explícita de usar apenas XZ)
+**Screenshot de Game View:**
+- Retângulo amarelo semi-transparente
+- 8 unidades dentro do retângulo
+- Todas ficam com highlight após drag
 
 ---
 
-### 9.6 Adicionar Opção "Selecionar Todos Mesmo Fora da Tela" (Double-Click)
+### 7.5 Duplo Clique (Selecionar Tipo)
 
-**Proposta:**
+```
+Jogador clica duas vezes em Worker (1)
+       │
+       ▼
+InputSelection.HandleClick() [1ª vez]
+       │
+       │ _lastClickedUnit = Worker1
+       │ _lastClickTime = Time.unscaledTime
+       │
+       │ GameEvents.RaiseUnitClick(Worker1, ctrl=false)
+       ▼
+SelectionManager: Selection = {Worker1}
+       │
+       ▼
+InputSelection.HandleClick() [2ª vez]
+       │
+       │ unit == _lastClickedUnit? YES
+       │ (Time.unscaledTime - _lastClickTime) <= 0.28s? YES
+       │
+       │ → DUPLO CLIQUE!
+       │ GameEvents.RaiseUnitDoubleClick(Worker1)
+       ▼
+SelectionManager.HandleDoubleClickUnit(Worker1)
+       │
+       │ Clear()
+       │
+       ├──▶ var mine = UnitRegistry.GetByFaction(player.myFaction)
+       │
+       ├──▶ foreach u in mine:
+       │    ├──▶ if !IsOnScreen(u.position): continue
+       │    └──▶ if u.def == Worker1.def: Add(u)
+       │
+       │ GameEvents.RaiseSelectionChanged(_selection)
+       ▼
+Selection = {Worker1, Worker2, Worker3, ...}
+       │
+       └──▶ TODOS os workers visíveis na tela
+```
 
-Adicionar flag configurável para double-click:
+**Screenshot de Game View:**
+- 8 workers na tela, todos com highlight amarelo
+
+---
+
+### 7.6 RMB no Chão (Limpar Seleção)
+
+```
+Jogador clica RMB no chão
+       │
+       ▼
+InputSelection.OnRmbPerformed()
+       │
+       │ picker.TryPickGroundAt(_pointer, out point)
+       │ → Acertou!
+       │
+       │ GameEvents.RaiseGroundClick(point, ctrl=false)
+       ▼
+SelectionManager.HandleClickGround(point, ctrl=false)
+       │
+       │ Clear()
+       │ GameEvents.RaiseSelectionChanged(_selection)
+       ▼
+Selection = {} (vazia)
+```
+
+**Design Note:**
+- RMB tipicamente usado para comandos (mover, atacar)
+- SelectionManager usa RMB para limpar seleção
+- Outros sistemas podem escutar `OnGroundClick` para movimento
+
+---
+
+### 7.7 Drag com Ctrl (Adicionar à Seleção)
+
+```
+Selection atual = {Worker1, Worker2}
+
+Jogador arrasta Ctrl+LMB sobre área com Archer1, Archer2
+       │
+       ▼
+SelectionManager.HandleEndDrag(upPos)
+       │
+       │ ctrl = input.IsCtrlPressed = true
+       │ SelectByWorldRect(start, end, additive: true)
+       │
+       │ additive = true → NÃO Clear()
+       │
+       ├──▶ Para cada unidade no retângulo:
+       │    └──▶ Add(unit) [não limpa seleção anterior]
+       │
+       │ GameEvents.RaiseSelectionChanged(_selection)
+       ▼
+Selection = {Worker1, Worker2, Archer1, Archer2}
+       │
+       └──▶ Workers + Archers selecionados
+```
+
+---
+
+## 8) INTEGRAÇÃO COM OUTROS MÓDULOS
+
+### 8.1 Dependências do Lote 1 (GameEvents, PlayerController)
+
+#### **Eventos Consumidos (Lote 4 escuta):**
+
+| Evento | Emissor | Uso no Lote 4 |
+|--------|---------|---------------|
+| `OnUnitClick` | InputSelection | SelectionManager.HandleClickUnit |
+| `OnGroundClick` | InputSelection | SelectionManager.HandleClickGround |
+| `OnDragBegin` | InputSelection | SelectionManager.OnBeginDragHandler, DragRectRenderer.BeginRect |
+| `OnDragging` | InputSelection | DragRectRenderer.UpdateRect |
+| `OnDragEnd` | InputSelection | SelectionManager.HandleEndDrag, DragRectRenderer.EndRect |
+| `OnUnitDoubleClick` | InputSelection | SelectionManager.HandleDoubleClickUnit |
+| `OnPointerDown` | InputSelection | (futuro: outline hover) |
+| `OnPointerUp` | InputSelection | (futuro: analytics) |
+
+#### **Eventos Emitidos (Lote 4 dispara):**
+
+| Evento | Emissor | Listeners Típicos |
+|--------|---------|-------------------|
+| `OnSelectionChanged` | SelectionManager | UnitListUI, SelectionInfoPanel, Audio, Minimap |
+
+#### **PlayerController:**
 
 ```csharp
-[Header("Double-Click Behavior")]
-[Tooltip("Se true, seleciona apenas unidades visíveis na tela. Se false, seleciona todas do tipo.")]
-public bool doubleClickOnlyVisible = true;
+// SelectionManager usa:
+player.myFaction // Para filtrar unidades por facção
+```
 
-void HandleDoubleClickUnit(Unit unit) {
-    if (onlyOwnUnits && unit.owner != player.myFaction) return;
+---
 
-    Clear();
-    var mine = UnitRegistry.GetByFaction(player.myFaction);
-    foreach (var u in mine) {
-        // Filtro de visibilidade (opcional)
-        if (doubleClickOnlyVisible && !IsOnScreen(u.transform.position)) continue;
-        
-        // Filtro de tipo
-        if (u.def == unit.def) Add(u);
+### 8.2 Dependências do Lote 3 (Unit, UnitRegistry)
+
+#### **Unit:**
+
+```csharp
+// SelectionManager chama:
+unit.SetSelected(true)  // Adicionar à seleção
+unit.SetSelected(false) // Remover da seleção
+
+// SelectionManager lê:
+unit.owner       // Filtrar por facção
+unit.def         // Comparar tipo (duplo clique)
+unit.transform   // Posição (IsOnScreen, SelectByWorldRect)
+```
+
+#### **UnitRegistry:**
+
+```csharp
+// SelectionManager usa:
+UnitRegistry.GetByFaction(player.myFaction) // Obter unidades da facção
+
+// Contexto:
+// - HandleDoubleClickUnit: Selecionar todas do tipo
+// - SelectByWorldRect: Testar apenas unidades da facção
+```
+
+---
+
+### 8.3 Interação com Lote 2 (Câmera - Opcional)
+
+**Possível Integração Futura:**
+
+```csharp
+// SelectionManager.HandleClickUnit() - adicionar foco na câmera
+void HandleClickUnit(Unit unit, bool ctrl)
+{
+    if (!ctrl) Clear();
+    Add(unit);
+    
+    // ✨ NOVO: Focar câmera na unidade selecionada
+    if (!ctrl && _selection.Count == 1)
+    {
+        GameEvents.RaiseSelectionFocus(unit.transform);
     }
     
     FireChanged();
 }
 ```
 
-**Uso:**
-- `doubleClickOnlyVisible = true`: Comportamento RTS clássico (Age of Empires)
-- `doubleClickOnlyVisible = false`: Comportamento moderno (StarCraft II)
+**Evento:**
+- `GameEvents.OnSelectionFocus` (Lote 1, Seção 2.4.5)
+- `RTSCameraController` (Lote 2) já escuta este evento
+
+**Benefício:**
+- Câmera foca automaticamente em unidade selecionada
+- Opcional: apenas se seleção única (não em drag rect)
 
 ---
 
-### 9.7 Adicionar Evento `OnHoverUnit` (Feature Futura)
+### 8.4 Interação com UI System (Futuro)
 
-**Proposta:**
-
-Para suportar tooltips e highlight de unidades ao passar o mouse:
+#### **UnitListUI:**
 
 ```csharp
-// InputSelection.cs
-public event Action<Unit> OnHoverUnit;    // Mouse sobre unidade
-public event Action OnHoverExit;          // Mouse saiu de unidade
-
-Unit _hoveredUnit;
-
-void Update() {
-    // ... código existente de drag ...
-
-    // Detectar hover (apenas se não está arrastando)
-    if (!_dragging && picker != null) {
-        if (picker.TryPickUnitAt(_pointer, out Unit unit)) {
-            if (unit != _hoveredUnit) {
-                _hoveredUnit = unit;
-                OnHoverUnit?.Invoke(unit);
-            }
-        } else {
-            if (_hoveredUnit != null) {
-                _hoveredUnit = null;
-                OnHoverExit?.Invoke();
-            }
+public class UnitListUI : MonoBehaviour
+{
+    [SerializeField] Transform listContainer;
+    [SerializeField] GameObject itemPrefab;
+    [SerializeField] SelectionManager selectionManager;
+    
+    void OnEnable()
+    {
+        GameEvents.OnSelectionChanged += OnSelectionChanged;
+    }
+    
+    void OnDisable()
+    {
+        GameEvents.OnSelectionChanged -= OnSelectionChanged;
+    }
+    
+    void OnSelectionChanged(IReadOnlyCollection<Unit> selection)
+    {
+        // Limpar lista
+        foreach (Transform child in listContainer)
+            Destroy(child.gameObject);
+        
+        // Criar itens
+        foreach (var unit in selection)
+        {
+            var item = Instantiate(itemPrefab, listContainer);
+            var itemUI = item.GetComponent<UnitListItemUI>();
+            itemUI.Bind(unit);
+            
+            // Listener de clique no item
+            itemUI.OnClick += () => {
+                selectionManager.SelectExactly(unit); // ← Usar API pública
+            };
         }
     }
 }
 ```
 
-**Consumer (Tooltip):**
+---
+
+#### **SelectionInfoPanel:**
 
 ```csharp
-public class UnitTooltip : MonoBehaviour {
-    [SerializeField] InputSelection input;
-    [SerializeField] GameObject tooltipPanel;
-    [SerializeField] TMP_Text tooltipText;
-
-    void OnEnable() {
-        input.OnHoverUnit += ShowTooltip;
-        input.OnHoverExit += HideTooltip;
+public class SelectionInfoPanel : MonoBehaviour
+{
+    [SerializeField] Text nameText;
+    [SerializeField] Text hpText;
+    [SerializeField] Text levelText;
+    
+    void OnEnable()
+    {
+        GameEvents.OnSelectionChanged += OnSelectionChanged;
     }
-
-    void OnDisable() {
-        input.OnHoverUnit -= ShowTooltip;
-        input.OnHoverExit -= HideTooltip;
+    
+    void OnDisable()
+    {
+        GameEvents.OnSelectionChanged -= OnSelectionChanged;
     }
-
-    void ShowTooltip(Unit unit) {
-        tooltipPanel.SetActive(true);
-        tooltipText.text = $"{unit.DisplayName}\nLv {unit.Level}\nHP: {unit.hp}/{unit.hpMax}";
-    }
-
-    void HideTooltip() {
-        tooltipPanel.SetActive(false);
+    
+    void OnSelectionChanged(IReadOnlyCollection<Unit> selection)
+    {
+        if (selection.Count == 0)
+        {
+            gameObject.SetActive(false);
+            return;
+        }
+        
+        gameObject.SetActive(true);
+        
+        if (selection.Count == 1)
+        {
+            // Seleção única: mostrar detalhes
+            var unit = selection.First();
+            nameText.text = unit.DisplayName;
+            hpText.text = $"HP: {unit.hp}/{unit.hpMax}";
+            levelText.text = $"Level: {unit.Level}";
+        }
+        else
+        {
+            // Múltiplas: mostrar contagem
+            nameText.text = $"{selection.Count} unidades selecionadas";
+            hpText.text = "";
+            levelText.text = "";
+        }
     }
 }
 ```
 
 ---
 
-### 9.8 Resumo de Prioridades de Refatoração
+## 9) CONFIGURAÇÃO NA CENA
 
-| # | Refatoração | Prioridade | Impacto | Esforço |
-|---|-------------|-----------|---------|---------|
-| 1 | Migrar `OnSelectionChanged` para `GameEvents` | 🔴 **ALTA** | Consistência arquitetural | 1-2h |
-| 2 | Remover `_rangeAnchor` (ou implementar) | 🟡 Média | Limpeza de código | 15min |
-| 3 | Adicionar Documentação XML | 🟡 Média | Developer Experience | 30min |
-| 4 | Validação de Referências (`Awake`) | 🟡 Média | Debugging mais fácil | 45min |
-| 5 | Otimização `SelectByWorldRect` | 🟢 Baixa | Performance (~10-15%) | 20min |
-| 6 | Flag `doubleClickOnlyVisible` | 🟢 Baixa | Configurabilidade | 10min |
-| 7 | Evento `OnHoverUnit` | 🟢 Baixa | Feature nova (tooltip) | 1-2h |
+### 9.1 Setup de SelectionManager
 
-**Ordem Sugerida:**
-1. Migrar para GameEvents (consistência crítica)
-2. Validação de Referências (evita bugs silenciosos)
-3. Remover `_rangeAnchor` (limpeza)
-4. Documentação XML (melhora manutenção)
-5. Otimizações e features (quando houver tempo)
+#### **1. Criar GameObject:**
+
+```
+Hierarchy → Create Empty
+Nome: "Selection"
+```
+
+#### **2. Adicionar Componentes:**
+
+```
+Selection (GameObject)
+├─ WorldPicker (Script)
+├─ InputSelection (Script)
+├─ SelectionManager (Script)
+└─ SelectionDebugListener (Script) [opcional]
+```
+
+#### **3. Configurar WorldPicker:**
+
+```
+┌─────────────────────────────────────┐
+│ World Picker (Script)               │
+├─────────────────────────────────────┤
+│ Cam: Main Camera                    │
+│ Unit Mask: Unit                     │
+│ Ground Mask: Ground                 │
+└─────────────────────────────────────┘
+```
+
+- **Cam:** Arraste Main Camera
+- **Unit Mask:** Selecione layer `Unit`
+- **Ground Mask:** Selecione layer `Ground`
 
 ---
 
-## 10) GLOSSÁRIO
+#### **4. Configurar InputSelection:**
 
-| Termo | Definição |
-|-------|-----------|
-| **Selection** | Conjunto de unidades atualmente escolhidas pelo jogador |
-| **Box Selection** | Seleção por arrasto (drag) criando retângulo na tela |
-| **Drag Threshold** | Distância mínima (pixels) para considerar movimento como drag |
-| **Double-Click Window** | Janela de tempo (segundos) para detectar duplo-clique |
-| **Additive Selection** | Seleção que adiciona unidades sem limpar anteriores (Ctrl) |
-| **Toggle Selection** | Alternar estado (se selecionado → remove; se não → adiciona) |
-| **UnitHitProxy** | Componente auxiliar para facilitar raycasting em hierarquias complexas |
-| **LayerMask** | Filtro de layers para raycasting (otimização) |
-| **EventSystem** | Sistema do Unity para detectar input em UI (botões, sliders) |
-| **IsPointerOverGameObject** | Método do EventSystem para detectar se mouse está sobre UI |
-| **QueryTriggerInteraction** | Flag de raycast (Collide = detecta triggers, Ignore = só sólidos) |
-| **Anchor** | Unidade de referência para seleção por range (shift-click) |
-| **Rect Inflate** | Margem extra em pixels no retângulo de drag (evita perda por borda) |
-| **OnScreen** | Verificação se posição 3D está visível na viewport da câmera |
-| **WorldPicker** | Componente para converter coordenadas de tela em posições/objetos 3D |
-| **SelectionChanged** | Evento disparado quando conjunto de unidades selecionadas muda |
+```
+┌─────────────────────────────────────┐
+│ Input Selection (Script)            │
+├─────────────────────────────────────┤
+│ Refs                                │
+│   Picker: Selection (World Picker) │
+│                                     │
+│ Config                              │
+│   Drag Threshold Px: 6              │
+│   Double Click Window: 0.28         │
+│                                     │
+│ Actions                             │
+│   Point: Selection/Point            │
+│   Lmb: Selection/LMB                │
+│   Rmb: Selection/RMB                │
+│   Ctrl: Selection/Ctrl              │
+│   Shift: Selection/Shift            │
+└─────────────────────────────────────┘
+```
+
+**Actions Setup:**
+1. Criar Input Actions Asset: `Assets → Create → Input Actions`
+2. Nome: `SelectionInputActions`
+3. Criar Action Map: `Selection`
+4. Criar Actions:
+   - `Point` (Value, Vector2) → Mouse/position
+   - `LMB` (Button) → Mouse/leftButton
+   - `RMB` (Button) → Mouse/rightButton
+   - `Ctrl` (Button) → Keyboard/leftCtrl
+   - `Shift` (Button) → Keyboard/leftShift
+5. Salvar asset
+6. Arrastar actions para campos do Inspector
 
 ---
 
-## 11) ESTRUTURA DE ARQUIVOS
-
-### 11.1 Scripts
+#### **5. Configurar SelectionManager:**
 
 ```
-Assets/
-└── Scripts/
-    ├── Core/
-    │   ├── Enums.cs (FactionId, UnitType)
-    │   ├── GameEvents.cs (event bus global)
-    │   └── PlayerController.cs
-    │
-    ├── Units/
-    │   ├── Unit.cs
-    │   ├── UnitDefinition.cs
-    │   └── UnitRegistry.cs
-    │
-    ├── Selection/
-    │   ├── InputSelection.cs          ← Input capture
-    │   ├── WorldPicker.cs              ← Raycasting
-    │   ├── SelectionManager.cs         ← Logic
-    │   ├── UnitHitProxy.cs             ← Helper
-    │   ├── DragRectRenderer.cs         ← Visual feedback
-    │   └── SelectionDebugListener.cs   ← Debug (opcional)
-    │
-    └── UI/
-        └── UnitListItemUI.cs           ← UI integration
+┌─────────────────────────────────────┐
+│ Selection Manager (Script)          │
+├─────────────────────────────────────┤
+│ Selection                           │
+│   Rect Inflate Px: 1.5              │
+│                                     │
+│ Refs                                │
+│   Player: PlayerSettings            │
+│   Cam: Main Camera                  │
+│   Input: Selection (Input Sel)     │
+│                                     │
+│ Filtro                              │
+│   Only Own Units: ☑                 │
+└─────────────────────────────────────┘
 ```
 
-### 11.2 Assets
+- **Player:** Arraste GameObject com `PlayerController`
+- **Cam:** Arraste Main Camera
+- **Input:** Arraste GameObject com `InputSelection`
+- **Only Own Units:** Marcar (típico para RTS)
+
+---
+
+### 9.2 Setup de DragRectRenderer
+
+#### **1. Criar GameObject:**
 
 ```
-Assets/
-├── InputActions/
-│   └── InputSystem.inputactions        ← Input Action Asset
-│
-├── Materials/
-│   └── SelectionMaterial.mat           ← Material amarelo transparente
-│
-├── Prefabs/
-│   ├── UI/
-│   │   └── UnitListItem.prefab         ← Item da lista de UI
-│   │
-│   ├── Selection/
-│   │   └── Quad.prefab                 ← Retângulo de drag
-│   │
-│   └── Units/
-│       ├── Worker.prefab
-│       │   └── HitProxy (UnitHitProxy)
-│       ├── Archer.prefab
-│       │   └── HitProxy (UnitHitProxy)
-│       └── ...
-│
-└── Scenes/
-    └── SampleScene.unity
+Hierarchy → Create Empty
+Nome: "DragRenderer"
 ```
 
-### 11.3 Hierarquia de Cena
+#### **2. Adicionar Componente:**
 
 ```
-SampleScene
-├── GLOBALSCRIPTS
-│   ├── GameContext
-│   ├── PlayerSettings (PlayerController)
-│   └── Selection
-│       ├── WorldPicker (Script)
-│       ├── InputSelection (Script)
-│       ├── SelectionManager (Script)
-│       └── DragRectRenderer (Script)
-│
-├── CAMERA
-│   └── Main Camera / RTS Camera
-│
-├── UI
-│   ├── Canvas
-│   └── EventSystem
-│
-├── TERRAIN
-│   └── Terrain (Layer: Ground)
-│
-└── UNITS
-    ├── Worker (1)
-    │   └── HitProxy
-    ├── Worker (2)
-    │   └── HitProxy
-    └── ...
+DragRenderer (GameObject)
+└─ DragRectRenderer (Script)
+```
+
+#### **3. Criar Prefab do Quad:**
+
+**Passo a Passo:**
+
+1. **Criar Quad:**
+   - Hierarchy → 3D Object → Quad
+   - Nome: `SelectionQuad`
+
+2. **Rotacionar:**
+   - Rotation: `(90, 0, 0)` (paralelo ao chão)
+
+3. **Criar Material:**
+   - Project → Create → Material
+   - Nome: `SelectionMaterial`
+   - Shader: `Universal Render Pipeline/Lit`
+   - Surface Type: `Transparent`
+   - Base Color: Yellow (255, 255, 0)
+   - Alpha: 0.3
+   - Drag material para Quad
+
+4. **Configurar Renderer:**
+   - Cast Shadows: Off
+   - Receive Shadows: Off (opcional)
+
+5. **Criar Prefab:**
+   - Arraste Quad para pasta `Assets/Prefabs/`
+   - Deletar da Hierarchy
+
+---
+
+#### **4. Configurar DragRectRenderer:**
+
+```
+┌─────────────────────────────────────┐
+│ Drag Rect Renderer (Script)         │
+├─────────────────────────────────────┤
+│ Cam: Main Camera                    │
+│ Quad Prefab: SelectionQuad          │
+└─────────────────────────────────────┘
+```
+
+- **Cam:** Arraste Main Camera
+- **Quad Prefab:** Arraste prefab `SelectionQuad`
+
+---
+
+### 9.3 Setup de UnitHitProxy (por Unidade)
+
+#### **Hierarquia Recomendada:**
+
+```
+Worker (GameObject) ← Layer: Default
+├─ Unit (Script)
+├─ Armature (Empty)
+│  ├─ Body (SkinnedMeshRenderer)
+│  └─ HitProxy (GameObject) ← Layer: Unit
+│     ├─ CapsuleCollider (Is Trigger: ON)
+│     └─ UnitHitProxy (Script)
+└─ SelectionRing (GameObject)
+```
+
+**Passo a Passo:**
+
+1. **Criar HitProxy:**
+   - Selecionar unidade (ex: Worker)
+   - Hierarchy → Create Empty Child
+   - Nome: `HitProxy`
+   - Layer: `Unit`
+
+2. **Adicionar Collider:**
+   - Add Component → Capsule Collider
+   - **Is Trigger:** Marcar
+   - Ajustar tamanho para cobrir unidade
+
+3. **Adicionar UnitHitProxy:**
+   - Add Component → Unit Hit Proxy
+   - `Reset()` auto-preenche campo `unit`
+
+4. **Verificar:**
+   - Inspector do HitProxy → `unit` aponta para componente `Unit` pai
+
+---
+
+### 9.4 LayerMasks e Collision Matrix
+
+#### **1. Configurar Layers:**
+
+**Edit → Project Settings → Tags and Layers**
+
+```
+Layers:
+  0: Default
+  6: Unit         ← Unidades (ou colliders de hit)
+  7: Ground       ← Terreno
 ```
 
 ---
 
-## 12) INTEGRAÇÃO COM MÓDULOS EXISTENTES
+#### **2. Configurar Collision Matrix:**
 
-### 12.1 Dependências Diretas
-
-```
-Selection Module
-├─ Depende de: Unit (Lote 3)
-│  └─ Unit.SetSelected(bool)
-│  └─ Unit.owner (FactionId)
-│  └─ Unit.def (UnitDefinition)
-│
-├─ Depende de: UnitRegistry (Lote 3)
-│  └─ UnitRegistry.GetByFaction(FactionId)
-│
-├─ Depende de: PlayerController (Lote 1)
-│  └─ player.myFaction
-│
-└─ Depende de: Unity Input System (externo)
-   └─ InputActionReference
-   └─ InputAction callbacks
-```
-
-### 12.2 Consumers (Quem Usa Selection)
+**Edit → Project Settings → Physics**
 
 ```
-Selection Module
-├─ Consumido por: UI System
-│  └─ UnitListItemUI escuta OnSelectionChanged
-│  └─ UnitPanel (futuro)
-│  └─ CommandButtons (futuro)
-│
-├─ Consumido por: Command System (futuro)
-│  └─ MoveCommand usa Selection
-│  └─ AttackCommand usa Selection
-│
-├─ Consumido por: Minimap (futuro)
-│  └─ Desenha indicadores de seleção
-│
-└─ Consumido por: Audio System (futuro)
-   └─ Toca sons de "unit selected"
+Collision Matrix:
+           Default  Unit  Ground
+Default      ✓      ✓      ✓
+Unit         ✓      ✗      ✗     ← Units não colidem entre si nem com chão
+Ground       ✓      ✗      ✓
 ```
 
-### 12.3 Fluxo Completo: Seleção → UI → GameEvents
+**Justificativa:**
+- Unit × Unit: Desmarcar (se unidades não têm física entre si)
+- Unit × Ground: Desmarcar (se unidades flutuam/NavMesh)
+- Manter: Default × Unit (raycasting funciona)
+
+---
+
+#### **3. Atribuir Layers aos GameObjects:**
+
+**Unidades:**
+```
+Worker (GameObject) ← Layer: Default (ou Default)
+└─ HitProxy ← Layer: Unit (collider aqui)
+```
+
+**Terreno:**
+```
+Terrain (GameObject) ← Layer: Ground
+```
+
+**Verificação:**
+- WorldPicker.unitMask deve incluir layer `Unit`
+- WorldPicker.groundMask deve incluir layer `Ground`
+
+---
+
+### 9.5 Input System Setup
+
+#### **1. Instalar Input System Package:**
+
+**Window → Package Manager**
+- Search: `Input System`
+- Install
+
+**Project Settings → Player**
+- Active Input Handling: `Both` ou `Input System Package (New)`
+
+---
+
+#### **2. Criar Input Actions Asset:**
+
+**Assets → Create → Input Actions**
+- Nome: `SelectionInputActions`
+
+**Estrutura:**
+```
+SelectionInputActions
+└─ Selection (Action Map)
+   ├─ Point (Value, Vector2, Pass Through)
+   │  └─ Binding: <Mouse>/position
+   ├─ LMB (Button)
+   │  └─ Binding: <Mouse>/leftButton
+   ├─ RMB (Button)
+   │  └─ Binding: <Mouse>/rightButton
+   ├─ Ctrl (Button)
+   │  └─ Binding: <Keyboard>/leftCtrl
+   └─ Shift (Button)
+      └─ Binding: <Keyboard>/leftShift
+```
+
+---
+
+#### **3. Habilitar Input Actions:**
+
+**Opção A: Via Script (já feito em InputSelection):**
+```csharp
+void OnEnable()
+{
+    point?.action.Enable();
+    lmb?.action.Enable();
+    // ...
+}
+```
+
+**Opção B: Via Auto-Enable:**
+- Input Actions Asset → Inspector
+- `Generate C# Class` (opcional, para strongly-typed access)
+
+---
+
+## 10) EXEMPLOS DE USO AVANÇADOS
+
+### 10.1 Seleção Programática
+
+#### **Selecionar Todas as Unidades de um Tipo:**
+
+```csharp
+// Selecionar todos os workers
+public void SelectAllWorkers()
+{
+    var workers = UnitRegistry.GetByFaction(player.myFaction)
+        .Where(u => u.def.type == UnitType.Worker);
+    
+    selectionManager.SelectExactly(workers);
+}
+
+// Botão de UI
+void OnButtonClick_SelectWorkers()
+{
+    SelectAllWorkers();
+}
+```
+
+---
+
+#### **Selecionar Unidades por HP Baixo:**
+
+```csharp
+// Selecionar unidades com HP < 30%
+public void SelectDamagedUnits()
+{
+    var damaged = UnitRegistry.GetByFaction(player.myFaction)
+        .Where(u => u.hp / u.hpMax < 0.3f);
+    
+    selectionManager.SelectExactly(damaged);
+}
+
+// Hotkey: H = Help (selecionar feridos)
+void Update()
+{
+    if (Input.GetKeyDown(KeyCode.H))
+    {
+        SelectDamagedUnits();
+    }
+}
+```
+
+---
+
+#### **Adicionar Unidades à Seleção Existente:**
+
+```csharp
+// Shift+Clique em grupo: adicionar à seleção
+public void OnGroupClick(List<Unit> groupUnits, bool shift)
+{
+    if (shift)
+    {
+        selectionManager.AddToSelection(groupUnits); // ✨ Método NOVO
+    }
+    else
+    {
+        selectionManager.SelectExactly(groupUnits);
+    }
+}
+```
+
+---
+
+### 10.2 Filtros Customizados
+
+#### **Selecionar Unidades em Área Customizada (Círculo):**
+
+```csharp
+public void SelectInRadius(Vector3 center, float radius)
+{
+    var mine = UnitRegistry.GetByFaction(player.myFaction);
+    var inRadius = mine.Where(u => Vector3.Distance(u.transform.position, center) <= radius);
+    
+    selectionManager.SelectExactly(inRadius);
+}
+
+// Exemplo: Selecionar unidades ao redor de um edifício
+void OnBuildingClick(Building building)
+{
+    SelectInRadius(building.transform.position, 10f);
+}
+```
+
+---
+
+#### **Selecionar Unidades Idle (Sem Comandos):**
+
+```csharp
+// Assumindo que Unit tem propriedade IsIdle
+public void SelectIdleUnits()
+{
+    var idle = UnitRegistry.GetByFaction(player.myFaction)
+        .Where(u => u.IsIdle); // Precisa implementar IsIdle
+    
+    selectionManager.SelectExactly(idle);
+}
+
+// Hotkey: I = Idle
+void Update()
+{
+    if (Input.GetKeyDown(KeyCode.I))
+    {
+        SelectIdleUnits();
+    }
+}
+```
+
+---
+
+### 10.3 Grupos de Controle (Control Groups)
+
+```csharp
+public class ControlGroups : MonoBehaviour
+{
+    [SerializeField] SelectionManager selectionManager;
+    
+    Dictionary<int, List<Unit>> _groups = new();
+    
+    void Update()
+    {
+        // Salvar grupo: Ctrl+1..9
+        if (Input.GetKey(KeyCode.LeftControl))
+        {
+            for (int i = 1; i <= 9; i++)
+            {
+                if (Input.GetKeyDown(KeyCode.Alpha0 + i))
+                {
+                    SaveGroup(i);
+                }
+            }
+        }
+        // Selecionar grupo: 1..9
+        else
+        {
+            for (int i = 1; i <= 9; i++)
+            {
+                if (Input.GetKeyDown(KeyCode.Alpha0 + i))
+                {
+                    SelectGroup(i);
+                }
+            }
+        }
+    }
+    
+    void SaveGroup(int groupIndex)
+    {
+        _groups[groupIndex] = new List<Unit>(selectionManager.Selection);
+        Debug.Log($"Grupo {groupIndex} salvo: {_groups[groupIndex].Count} unidades");
+    }
+    
+    void SelectGroup(int groupIndex)
+    {
+        if (_groups.TryGetValue(groupIndex, out var units))
+        {
+            // Remover unidades mortas
+            units.RemoveAll(u => u == null);
+            
+            selectionManager.SelectExactly(units);
+            Debug.Log($"Grupo {groupIndex} selecionado: {units.Count} unidades");
+        }
+    }
+}
+```
+
+---
+
+### 10.4 Seleção por Box 2D (Screen Space)
+
+```csharp
+// Alternativa ao drag rect 3D: usar screen space box
+public void SelectInScreenRect(Rect screenRect)
+{
+    var mine = UnitRegistry.GetByFaction(player.myFaction);
+    var cam = Camera.main;
+    
+    var selected = new List<Unit>();
+    foreach (var unit in mine)
+    {
+        Vector3 screenPos = cam.WorldToScreenPoint(unit.transform.position);
+        
+        // Verificar se está na frente da câmera e dentro do rect
+        if (screenPos.z > 0 && screenRect.Contains(screenPos))
+        {
+            selected.Add(unit);
+        }
+    }
+    
+    selectionManager.SelectExactly(selected);
+}
+```
+
+---
+
+### 10.5 Seleção Inteligente (Smart Select)
+
+```csharp
+// Clique: Seleciona unidade
+// Duplo clique: Seleciona todas do tipo
+// Triplo clique: Seleciona todas da categoria (combate, coleta, etc.)
+public class SmartSelection : MonoBehaviour
+{
+    [SerializeField] SelectionManager selectionManager;
+    [SerializeField] float tripleClickWindow = 0.5f;
+    
+    int _clickCount = 0;
+    float _lastClickTime;
+    Unit _lastClickedUnit;
+    
+    void OnEnable()
+    {
+        GameEvents.OnUnitClick += OnUnitClick;
+    }
+    
+    void OnDisable()
+    {
+        GameEvents.OnUnitClick -= OnUnitClick;
+    }
+    
+    void OnUnitClick(Unit unit, bool ctrl)
+    {
+        if (unit == _lastClickedUnit && Time.unscaledTime - _lastClickTime <= tripleClickWindow)
+        {
+            _clickCount++;
+        }
+        else
+        {
+            _clickCount = 1;
+        }
+        
+        _lastClickedUnit = unit;
+        _lastClickTime = Time.unscaledTime;
+        
+        if (_clickCount == 3)
+        {
+            // Triplo clique: selecionar categoria
+            SelectCategory(unit);
+            _clickCount = 0;
+        }
+    }
+    
+    void SelectCategory(Unit unit)
+    {
+        UnitType type = unit.def.type;
+        
+        // Definir categoria
+        List<UnitType> category;
+        if (type == UnitType.Worker)
+        {
+            category = new List<UnitType> { UnitType.Worker };
+        }
+        else if (type == UnitType.Warrior || type == UnitType.Archer || type == UnitType.Spearman)
+        {
+            category = new List<UnitType> { UnitType.Warrior, UnitType.Archer, UnitType.Spearman };
+        }
+        else
+        {
+            category = new List<UnitType> { type };
+        }
+        
+        // Selecionar todas da categoria
+        var units = UnitRegistry.GetByFaction(selectionManager.player.myFaction)
+            .Where(u => category.Contains(u.def.type));
+        
+        selectionManager.SelectExactly(units);
+    }
+}
+```
+
+---
+
+## 11) TROUBLESHOOTING E FAQ
+
+### 11.1 Clique não seleciona unidade
+
+**Sintomas:**
+- Clicar em unidade não seleciona
+- Console sem erros
+
+**Soluções:**
+
+1. **Verificar LayerMask:**
+   ```csharp
+   // WorldPicker.unitMask deve incluir layer da unidade
+   Debug.Log($"Unit layer: {unit.gameObject.layer}");
+   Debug.Log($"Unit mask includes layer: {(unitMask & (1 << unit.gameObject.layer)) != 0}");
+   ```
+
+2. **Verificar Collider:**
+   - Unidade tem Collider?
+   - Collider está habilitado?
+   - Collider está em layer correto?
+
+3. **Verificar EventSystem:**
+   - Clique pode estar sobre UI
+   - Debug: `Debug.Log(InputSelection.IsPointerOverUI());`
+
+4. **Verificar InputActions:**
+   - Actions estão habilitadas?
+   - Bindings corretos?
+   - Debug: Adicionar log em `OnLmbStarted`
+
+---
+
+### 11.2 Drag rect não aparece
+
+**Sintomas:**
+- Arrastar mouse não mostra retângulo amarelo
+- Seleção funciona, mas sem visual
+
+**Soluções:**
+
+1. **Verificar Prefab:**
+   - `DragRectRenderer.quadPrefab` está atribuído?
+   - Prefab tem MeshRenderer + Material?
+
+2. **Verificar Material:**
+   - Material é transparente?
+   - Alpha > 0?
+   - Shader correto?
+
+3. **Verificar Câmera:**
+   - `DragRectRenderer.cam` está atribuído?
+   - Câmera renderiza layer do quad?
+
+4. **Verificar Eventos:**
+   - `GameEvents.OnDragBegin` está sendo disparado?
+   - Debug: `Debug.Log("BeginRect chamado");` em `BeginRect()`
+
+---
+
+### 11.3 Duplo clique não funciona
+
+**Sintomas:**
+- Duplo clique seleciona apenas unidade clicada
+- Não seleciona todas do tipo
+
+**Soluções:**
+
+1. **Verificar Janela Temporal:**
+   ```csharp
+   // InputSelection.doubleClickWindow
+   // Padrão: 0.28s
+   // Se clicar muito devagar, não detecta
+   ```
+
+2. **Verificar UnitDefinition:**
+   ```csharp
+   // HandleDoubleClickUnit compara:
+   if (u.def == unit.def) // Compara referência ao ScriptableObject
+   
+   // Se UnitDefinitions são diferentes instâncias, não funcionará
+   // Solução: Comparar tipo
+   if (u.def.type == unit.def.type)
+   ```
+
+3. **Verificar IsOnScreen:**
+   - Método pode estar retornando `false` para unidades visíveis
+   - Debug: `Debug.Log($"IsOnScreen({u.DisplayName}): {IsOnScreen(u.transform.position)}");`
+
+---
+
+### 11.4 Selecionar unidade inimiga quando onlyOwnUnits = true
+
+**Sintomas:**
+- Consegue selecionar unidades inimigas
+- `onlyOwnUnits` está marcado
+
+**Soluções:**
+
+1. **Verificar owner da Unit:**
+   ```csharp
+   Debug.Log($"Unit owner: {unit.owner}");
+   Debug.Log($"Player faction: {player.myFaction}");
+   Debug.Log($"Match: {unit.owner == player.myFaction}");
+   ```
+
+2. **Verificar PlayerController:**
+   - `SelectionManager.player` está atribuído?
+   - `player.myFaction` está correto?
+
+3. **Verificar filtro:**
+   ```csharp
+   // Em HandleClickUnit()
+   if (onlyOwnUnits && unit.owner != player.myFaction) return; // ← Deve retornar
+   ```
+
+---
+
+### 11.5 Drag rect seleciona unidades fora da área
+
+**Sintomas:**
+- Drag rect pequeno seleciona muitas unidades
+- Unidades longe da área são selecionadas
+
+**Soluções:**
+
+1. **Verificar Bounds:**
+   ```csharp
+   // Em SelectByWorldRect()
+   Debug.Log($"Bounds: {bounds.min} to {bounds.max}");
+   Debug.Log($"Unit {u.DisplayName} at {u.transform.position}");
+   Debug.Log($"Contains: {bounds.Contains(new Vector3(pos.x, 0f, pos.z))}");
+   ```
+
+2. **Verificar Y = infinito:**
+   - Bounds tem `Y = float.MinValue..MaxValue`
+   - Unidades em alturas diferentes são selecionadas
+   - Se problema: limitar Y
+
+3. **Verificar rectInflatePx:**
+   - Valor alto (ex: 10px) aumenta muito a área
+   - Reduzir para 1-2px
+
+---
+
+### 11.6 Performance ruim com muitas unidades
+
+**Sintomas:**
+- FPS cai ao arrastar drag rect
+- Lag ao selecionar
+
+**Soluções:**
+
+1. **Otimizar SelectByWorldRect:**
+   ```csharp
+   // Usar spatial partitioning (quadtree, grid)
+   // Ou limitar consulta por distância
+   var mine = UnitRegistry.GetByFaction(player.myFaction)
+       .Where(u => Vector3.Distance(u.transform.position, center) <= maxDistance);
+   ```
+
+2. **Otimizar IsOnScreen:**
+   ```csharp
+   // Cache screenPos se chamar múltiplas vezes
+   Dictionary<Unit, Vector3> _screenPosCache = new();
+   ```
+
+3. **Usar UnitHitProxy:**
+   - `GetComponentInParent<Unit>()` é O(n) na hierarquia
+   - `UnitHitProxy` é O(1)
+
+---
+
+## 12) TABELA DE RELACIONAMENTOS COMPLETA
+
+### 12.1 Classes do Lote 4
+
+| Classe | Tipo | Depende De | Dependentes | Eventos (Emit) | Eventos (Listen) |
+|--------|------|-----------|-------------|----------------|------------------|
+| **SelectionManager** | MB | `PlayerController` (L1), `Camera`, `InputSelection`, `Unit` (L3), `UnitRegistry` (L3), `GameEvents` (L1) | UI Systems | `OnSelectionChanged` | `OnUnitClick`, `OnGroundClick`, `OnDragBegin`, `OnDragEnd`, `OnUnitDoubleClick` |
+| **InputSelection** | MB | `WorldPicker`, `Input System`, `GameEvents` (L1) | `SelectionManager` | `OnPointerDown`, `OnPointerUp`, `OnDragBegin`, `OnDragging`, `OnDragEnd`, `OnUnitClick`, `OnGroundClick`, `OnUnitDoubleClick` | - |
+| **WorldPicker** | MB | `Camera`, `Unit` (L3) | `InputSelection` | - | - |
+| **DragRectRenderer** | MB | `Camera`, `GameEvents` (L1) | - | - | `OnDragBegin`, `OnDragging`, `OnDragEnd` |
+| **UnitHitProxy** | MB | `Unit` (L3) | `WorldPicker` (opcional) | - | - |
+
+---
+
+### 12.2 Integrações com Outros Lotes
+
+| Lote Consumidor | Usa do Lote 4 | Forma de Uso |
+|-----------------|---------------|--------------|
+| **Lote 1 - GameEvents** | Todos os eventos de input/seleção | InputSelection emite 8 eventos, SelectionManager emite 1 |
+| **Lote 3 - Unit/Registry** | SelectionManager chama SetSelected(), consulta Registry | `unit.SetSelected(true/false)`, `UnitRegistry.GetByFaction()` |
+| **UI System** | Escuta OnSelectionChanged | `GameEvents.OnSelectionChanged`, acessa `SelectionManager.Selection` |
+| **Câmera (Lote 2)** | (opcional) OnSelectionFocus | Futuro: focar câmera em unidade selecionada |
+| **Command System** | Escuta OnGroundClick para movimento | `GameEvents.OnGroundClick` → mover unidades selecionadas |
+
+---
+
+### 12.3 Fluxo de Dados Completo
 
 ```
-┌──────────────┐
-│   Jogador    │
-│ clica unidade│
-└──────┬───────┘
+Input Físico (Mouse/Keyboard)
        │
        ▼
-┌──────────────────┐
-│ InputSelection   │ (Captura input)
-└──────┬───────────┘
-       │ OnClickUnit(unit, ctrl)
+Unity Input System
+       │
        ▼
-┌──────────────────┐
-│ SelectionManager │ (Gerencia estado)
-│  • Add(unit)     │
-│  • FireChanged() │──────────┐
-└──────────────────┘          │
-                              │ ⚠️ ATUAL: OnSelectionChanged (local)
-                              │ 🔄 REFATORAR: GameEvents.RaiseSelectionChanged
-                              ▼
-                    ┌──────────────────────┐
-                    │  GameEvents          │ (Event bus)
-                    │ .OnSelectionChanged  │
-                    └──────┬───────────────┘
-                           │
-                ┌──────────┼──────────┬─────────────┐
-                ▼          ▼          ▼             ▼
-         ┌──────────┐ ┌────────┐ ┌────────┐  ┌──────────┐
-         │ UnitList │ │Minimap │ │ Audio  │  │  Future  │
-         │    UI    │ │        │ │        │  │ Systems  │
-         └──────────┘ └────────┘ └────────┘  └──────────┘
-                │
-                ▼
-         ┌──────────────────┐
-         │ UnitListItemUI   │ (Escuta GameEvents.OnUnitProgressChanged)
-         │  • Bind(unit)    │
-         │  • Refresh XP    │
-         └──────────────────┘
+InputSelection
+       │
+       ├──▶ OnLmbStarted/Canceled
+       ├──▶ OnRmbPerformed
+       ├──▶ OnPointPerformed
+       │
+       │ Emite 8 eventos via GameEvents
+       ▼
+GameEvents (Lote 1)
+       │
+       ├─────────────────┬─────────────────┐
+       │                 │                 │
+       ▼                 ▼                 ▼
+SelectionManager   DragRectRenderer   (Outros)
+       │                 │
+       │ Gerencia        │ Renderiza
+       │ HashSet<Unit>   │ Quad 3D
+       │                 │
+       ├──▶ Chama Unit.SetSelected()
+       │    └──▶ GameEvents.RaiseUnitSelectionChanged (Lote 3)
+       │
+       │ Emite OnSelectionChanged
+       ▼
+GameEvents.OnSelectionChanged
+       │
+       ├─────────────────┬─────────────────┬─────────────────┐
+       ▼                 ▼                 ▼                 ▼
+  UnitListUI      SelectionInfo     MinimapUI         AudioManager
+  (reconstrói)    (atualiza)        (destaca)         (som)
 ```
 
 ---
 
-## 13) CHECKLIST DE IMPLEMENTAÇÃO
+## 13) CHANGELOG E MIGRAÇÕES
 
-Use esta checklist para verificar se o módulo está configurado corretamente:
+### 13.1 Mudanças da Versão Anterior → v1.0
 
-### Setup Inicial
-- [ ] Layers configuradas (Unit = Layer 3, Ground = Layer 7)
-- [ ] Input Actions Asset criado ("Selection" Action Map)
-- [ ] Prefab "Quad" criado (material amarelo transparente)
-- [ ] UnitHitProxy adicionado a todos prefabs de unidades
+#### **✅ ADICIONADO:**
 
-### GameObject "Selection" na Cena
-- [ ] WorldPicker configurado (cam, unitMask, groundMask)
-- [ ] InputSelection configurado (picker, InputActionReferences)
-- [ ] SelectionManager configurado (player, cam, input)
-- [ ] DragRectRenderer configurado (input, cam, quadPrefab) [opcional]
+1. **Eventos via GameEvents (Refatoração Principal):**
+   - **InputSelection:** Todos os eventos locais removidos → `GameEvents.Raise*`
+   - **SelectionManager:** Evento local removido → `GameEvents.RaiseSelectionChanged`
+   - **DragRectRenderer:** Referência a InputSelection removida → usa GameEvents
 
-### Testes Funcionais
-- [ ] Clique simples seleciona unidade (highlight aparece)
-- [ ] Ctrl+Clique adiciona/remove (toggle)
-- [ ] Drag seleciona múltiplas (retângulo amarelo aparece)
-- [ ] Ctrl+Drag adiciona ao conjunto existente
-- [ ] Duplo-clique seleciona todas do tipo visíveis
-- [ ] Clique em UI não afeta seleção de unidades
-- [ ] Clique em terreno limpa seleção (ou é ignorado, dependendo do setup)
+2. **Método Aditivo (SelectionManager):**
+   - `AddToSelection(IEnumerable<Unit>)` ✨ NOVO
+   - Adiciona unidades sem limpar seleção existente
 
-### Integração com Outros Módulos
-- [ ] UI escuta OnSelectionChanged (ou GameEvents após refatoração)
-- [ ] UnitListItemUI atualiza corretamente
-- [ ] GameEvents.OnUnitProgressChanged funciona (barra de XP)
+3. **Detecção de UI Melhorada:**
+   - `ComputePointerOverUI()` com suporte a New Input System
+   - Suporte a Mouse + Touchscreen
 
-### Refatorações Aplicadas
-- [ ] OnSelectionChanged migrado para GameEvents
-- [ ] _rangeAnchor removido (ou implementado)
-- [ ] Documentação XML adicionada
-- [ ] Validação de referências em Awake()
+#### **🔄 MODIFICADO:**
+
+1. **InputSelection.cs:**
+   - Eventos locais substituídos por GameEvents (8 eventos)
+   - `HandleClick()` agora emite eventos via GameEvents
+   - Detecção de UI otimizada (cache em `_overUIThisFrame`)
+
+2. **SelectionManager.cs:**
+   - Evento local substituído por GameEvents
+   - Handlers agora escutam GameEvents (não InputSelection diretamente)
+   - `FireChanged()` chama `GameEvents.RaiseSelectionChanged()`
+
+3. **DragRectRenderer.cs:**
+   - Referência a `InputSelection` removida
+   - Eventos via GameEvents
+
+#### **❌ REMOVIDO:**
+
+1. **Eventos Locais (Obsoletos):**
+   - `InputSelection.OnPointerDown` → Use `GameEvents.OnPointerDown`
+   - `InputSelection.OnPointerUp` → Use `GameEvents.OnPointerUp`
+   - `InputSelection.OnBeginDrag` → Use `GameEvents.OnDragBegin`
+   - `InputSelection.OnDragging` → Use `GameEvents.OnDragging`
+   - `InputSelection.OnEndDrag` → Use `GameEvents.OnDragEnd`
+   - `InputSelection.OnClickUnit` → Use `GameEvents.OnUnitClick`
+   - `InputSelection.OnDoubleClickUnit` → Use `GameEvents.OnUnitDoubleClick`
+   - `InputSelection.OnClickGround` → Use `GameEvents.OnGroundClick`
+   - `SelectionManager.OnSelectionChanged` → Use `GameEvents.OnSelectionChanged`
 
 ---
 
-## 14) VERSÃO E STATUS
+### 13.2 Guia de Migração (Versão Antiga → v1.0)
 
-**Versão Atual:** 2.0  
-**Data:** Outubro 2025  
-**Status:**  
-- ✅ **Implementado e Funcional**
-- ⚠️ **Pendente Refatoração:** Migração para GameEvents
+#### **Para Código que Usava Eventos Locais de InputSelection:**
 
-**Próximos Passos:**
-1. Refatorar `OnSelectionChanged` → `GameEvents.RaiseSelectionChanged`
-2. Implementar sistema de comandos (Move, Attack) usando `Selection`
-3. Adicionar suporte a grupos de seleção (Ctrl+1-9)
-4. Implementar formações (linha, coluna, quadrado)
+**Antes (❌ Obsoleto):**
+```csharp
+public class MySystem : MonoBehaviour
+{
+    [SerializeField] InputSelection input;
+    
+    void OnEnable()
+    {
+        input.OnClickUnit += HandleClickUnit; // ❌ Evento local
+        input.OnDragging += HandleDragging;   // ❌
+    }
+}
+```
+
+**Depois (✅ Atual):**
+```csharp
+public class MySystem : MonoBehaviour
+{
+    void OnEnable()
+    {
+        GameEvents.OnUnitClick += HandleClickUnit; // ✅ GameEvents
+        GameEvents.OnDragging += HandleDragging;   // ✅
+    }
+    
+    void OnDisable()
+    {
+        GameEvents.OnUnitClick -= HandleClickUnit; // ✅ Desinscrever
+        GameEvents.OnDragging -= HandleDragging;   // ✅
+    }
+    
+    void HandleClickUnit(Unit unit, bool ctrl) { ... }
+    void HandleDragging(Vector2 screenPos) { ... }
+}
+```
+
+---
+
+#### **Para Código que Usava Evento Local de SelectionManager:**
+
+**Antes (❌ Obsoleto):**
+```csharp
+public class UnitListUI : MonoBehaviour
+{
+    [SerializeField] SelectionManager selectionManager;
+    
+    void OnEnable()
+    {
+        selectionManager.OnSelectionChanged += OnSelectionChanged; // ❌
+    }
+}
+```
+
+**Depois (✅ Atual):**
+```csharp
+public class UnitListUI : MonoBehaviour
+{
+    void OnEnable()
+    {
+        GameEvents.OnSelectionChanged += OnSelectionChanged; // ✅
+    }
+    
+    void OnDisable()
+    {
+        GameEvents.OnSelectionChanged -= OnSelectionChanged; // ✅
+    }
+    
+    void OnSelectionChanged(IReadOnlyCollection<Unit> selection) { ... }
+}
+```
+
+---
+
+#### **Para Código que Referenciava InputSelection em DragRectRenderer:**
+
+**Antes (❌ Obsoleto):**
+```csharp
+public class DragRectRenderer : MonoBehaviour
+{
+    public InputSelection input; // ❌ Referência removida
+    
+    void OnEnable()
+    {
+        input.OnBeginDrag += BeginRect; // ❌
+    }
+}
+```
+
+**Depois (✅ Atual):**
+```csharp
+public class DragRectRenderer : MonoBehaviour
+{
+    // ✅ Sem referência a InputSelection
+    
+    void OnEnable()
+    {
+        GameEvents.OnDragBegin += BeginRect; // ✅
+        GameEvents.OnDragging += UpdateRect; // ✅
+        GameEvents.OnDragEnd += EndRect;     // ✅
+    }
+    
+    void OnDisable()
+    {
+        GameEvents.OnDragBegin -= BeginRect;
+        GameEvents.OnDragging -= UpdateRect;
+        GameEvents.OnDragEnd -= EndRect;
+    }
+}
+```
+
+---
+
+### 13.3 Checklist de Migração
+
+Use esta checklist para atualizar seu código:
+
+- [ ] **Buscar eventos locais de InputSelection:** Procure por `input.On*`
+- [ ] **Substituir por GameEvents:** Troque por `GameEvents.On*`
+- [ ] **Buscar evento local de SelectionManager:** Procure por `selectionManager.OnSelectionChanged`
+- [ ] **Substituir por GameEvents:** Troque por `GameEvents.OnSelectionChanged`
+- [ ] **Mover subscribe para OnEnable():** Se estava em `Start()`, mova para `OnEnable()`
+- [ ] **Adicionar unsubscribe em OnDisable():** CRÍTICO para evitar memory leaks
+- [ ] **Remover referências a InputSelection:** Se só usava para eventos (não propriedades)
+- [ ] **Testar:** Verificar que eventos ainda funcionam após migração
+
+---
+
+## 14) REFERÊNCIAS RÁPIDAS
+
+### 14.1 Atalhos de Código
+
+**Selecionar unidade programaticamente:**
+```csharp
+selectionManager.SelectExactly(unit);
+```
+
+**Selecionar múltiplas unidades:**
+```csharp
+selectionManager.SelectExactly(listOfUnits);
+```
+
+**Adicionar à seleção existente:**
+```csharp
+selectionManager.AddToSelection(listOfUnits); // ✨ NOVO
+```
+
+**Togglear unidades:**
+```csharp
+selectionManager.ToggleSet(listOfUnits);
+```
+
+**Verificar se selecionada:**
+```csharp
+if (selectionManager.IsSelected(unit)) { ... }
+```
+
+**Obter seleção atual:**
+```csharp
+foreach (var unit in selectionManager.Selection) { ... }
+int count = selectionManager.Count;
+```
+
+---
+
+### 14.2 Valores Típicos
+
+| Parâmetro | Min | Típico | Max | Descrição |
+|-----------|-----|--------|-----|-----------|
+| dragThresholdPx | 2 | 6 | 15 | Pixels para drag |
+| doubleClickWindow | 0.15 | 0.28 | 0.5 | Segundos para duplo clique |
+| rectInflatePx | 0 | 1.5 | 5 | Pixels extras no drag rect |
+
+---
+
+### 14.3 Eventos do Lote 4
+
+**Emitidos por InputSelection:**
+
+| Evento | Parâmetros | Quando |
+|--------|------------|--------|
+| `OnPointerDown` | `Vector2 screenPos` | LMB pressionado |
+| `OnPointerUp` | `Vector2 screenPos` | LMB solto |
+| `OnDragBegin` | `Vector2 startPos` | Drag iniciado |
+| `OnDragging` | `Vector2 currentPos` | Durante drag |
+| `OnDragEnd` | `Vector2 endPos` | Drag terminado |
+| `OnUnitClick` | `Unit unit, bool ctrl` | Clique em unidade |
+| `OnGroundClick` | `Vector3 worldPos, bool ctrl` | Clique no chão |
+| `OnUnitDoubleClick` | `Unit unit` | Duplo clique |
+
+**Emitido por SelectionManager:**
+
+| Evento | Parâmetros | Quando |
+|--------|------------|--------|
+| `OnSelectionChanged` | `IReadOnlyCollection<Unit>` | Seleção muda |
+
+---
+
+### 14.4 Estrutura de Arquivos
+
+```
+Assets/
+├── Scripts/
+│   └── Selection/
+│       ├── SelectionManager.cs
+│       ├── InputSelection.cs
+│       ├── WorldPicker.cs
+│       ├── DragRectRenderer.cs
+│       ├── UnitHitProxy.cs
+│       └── SelectionDebugListener.cs
+│
+├── Prefabs/
+│   └── Selection/
+│       └── SelectionQuad.prefab
+│
+├── Materials/
+│   └── SelectionMaterial.mat
+│
+└── Input/
+    └── SelectionInputActions.inputactions
+```
+
+---
+
+## 15) CONCLUSÃO
+
+### 15.1 Resumo do Lote 4
+
+O **Lote 4 - Selection System** estabelece o **sistema completo de seleção de unidades** para Medieval Thrones:
+
+✅ **InputSelection**: Captura de input via New Input System com 8 eventos  
+✅ **SelectionManager**: Gerenciamento de seleção com filtros e API pública  
+✅ **WorldPicker**: Raycasting otimizado com LayerMasks  
+✅ **DragRectRenderer**: Visual de seleção em 3D com quad semi-transparente  
+✅ **UnitHitProxy**: Proxy para otimizar detecção em hierarquias complexas  
+✅ **Integração com GameEvents**: 9 eventos (8 input + 1 seleção)  
+✅ **Suporte Completo**: Clique simples, Ctrl, drag, duplo clique, RMB  
+
+### 15.2 Qualidade da Arquitetura
+
+**Pontos Fortes:**
+- ✅ **Desacoplamento Total**: Todos os eventos via GameEvents
+- ✅ **Modularidade**: 5 componentes independentes e reutilizáveis
+- ✅ **Extensibilidade**: API pública para seleção programática
+- ✅ **Performance**: LayerMasks, HashSet, otimizações
+- ✅ **UX Profissional**: Drag rect, duplo clique, filtros por facção
+- ✅ **Detecção de UI**: Ignora cliques sobre UI (EventSystem)
+
+**Padrões de Excelência:**
+- ✅ Event-driven architecture (GameEvents)
+- ✅ New Input System (InputActionReference)
+- ✅ LayerMasks para raycasting otimizado
+- ✅ HashSet para seleção O(1)
+- ✅ IReadOnlyCollection para API segura
+
+### 15.3 Integração com Outros Lotes
+
+**Lote 1 - Variáveis Globais & Factions:**
+- ✅ Emite 9 eventos via `GameEvents`
+- ✅ Usa `PlayerController.myFaction`
+- ✅ Todas as integrações já documentadas no Lote 1
+
+**Lote 3 - Módulo Unit:**
+- ✅ Chama `Unit.SetSelected(true/false)`
+- ✅ Consulta `UnitRegistry.GetByFaction()`
+- ✅ Integração prevista no Lote 3 confirmada
+
+**Lote 2 - Câmera System:**
+- ✅ (Opcional) Integração via `OnSelectionFocus`
+- ✅ Sem conflitos, integração preparada
+
+**UI System (Futuro):**
+- ✅ Escuta `OnSelectionChanged`
+- ✅ Acessa `SelectionManager.Selection`
+- ✅ API pública completa disponível
+
+### 15.4 Próximos Passos
+
+**Melhorias Futuras:**
+- Shift+Click para range selection (usar `_rangeAnchor`)
+- Otimização de `WorldPicker` com suporte a `UnitHitProxy`
+- Control Groups (Ctrl+1..9 para salvar grupos)
+- Smart Selection (triplo clique para categoria)
+- Spatial partitioning para drag rect com milhares de unidades
+
+**Novos Módulos (que usarão Selection):**
+- Sistema de Comandos (mover, atacar, patrulhar)
+- Sistema de Formações (unidades selecionadas em formação)
+- Sistema de UI Avançado (painel de informações, lista de unidades)
+- Sistema de IA (selecionar unidades da IA para debug)
 
 ---
 
 **Documento mantido por:** Equipe de Desenvolvimento  
 **Última atualização:** Outubro 2025  
-**Versão do Documento:** 3.0 (Refatoração Completa)
+**Versão do Documento:** 3.0  
+**Compatibilidade:** Unity 2022.3+, New Input System 1.7+, Medieval Thrones v3.0+
 
 ---
