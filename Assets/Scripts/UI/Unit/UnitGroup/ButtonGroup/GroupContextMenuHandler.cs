@@ -5,7 +5,7 @@ using System.Linq;
 
 /// <summary>
 /// Controller do menu de contexto do grupo (Rename/Delete).
-/// Anexado ao prefab ButtonsGroup.
+/// REFATORADO (Lote 5): Dispara evento global ao renomear grupo.
 /// </summary>
 public class GroupContextMenuHandler : MonoBehaviour
 {
@@ -72,10 +72,14 @@ public class GroupContextMenuHandler : MonoBehaviour
         // 1. Aplica o novo nome (se for válido)
         if (!string.IsNullOrEmpty(trimmedName))
         {
+            string oldName = _targetGroup.GroupName;
             _targetGroup.GroupName = trimmedName;
 
             // 2. Atualiza o visual do cabeçalho do grupo
             if (_headerText) _headerText.text = trimmedName;
+
+            // REFATORAÇÃO (Lote 5): Disparar evento global de rename
+            GameEvents.RaiseGroupRenamed(_targetGroup, trimmedName);
         }
 
         // 3. Fecha o menu de contexto (limpeza)
@@ -89,13 +93,14 @@ public class GroupContextMenuHandler : MonoBehaviour
         // --- LÓGICA DE DELETE ---
 
         // Os itens do grupo devem voltar para a lista principal (raiz).
-        // Vamos usar o helper EnumerateAllUnitsInGroup (a ser criado no UnitListPanel)
         var unitsToRestore = _targetGroup.Units.ToList(); // Faz uma cópia da lista
 
-        // NOVO MÉTODO (A ser criado no UnitListPanel): Deleta o grupo e move unidades
+        // Deleta o grupo e move unidades
         _rootPanel.DeleteGroupAndRestoreUnits(_targetGroup, unitsToRestore);
 
         // Fecha o menu
         _contextMenu?.CloseMenu();
+
+        // NOTA: O evento OnGroupDeleted é disparado dentro de DeleteGroupAndRestoreUnits
     }
 }

@@ -2,7 +2,9 @@ using UnityEngine;
 
 public class DragRectRenderer : MonoBehaviour
 {
-    public InputSelection input;
+    // REFATORAÇÃO: Não precisa mais de referência ao InputSelection
+    // public InputSelection input; // REMOVIDO
+
     public Camera cam;
     public GameObject quadPrefab;
 
@@ -11,16 +13,18 @@ public class DragRectRenderer : MonoBehaviour
 
     void OnEnable()
     {
-        input.OnBeginDrag += BeginRect;
-        input.OnDragging += UpdateRect;
-        input.OnEndDrag += EndRect;
+        // REFATORAÇÃO: Subscrever eventos via GameEvents
+        GameEvents.OnDragBegin += BeginRect;
+        GameEvents.OnDragging += UpdateRect;
+        GameEvents.OnDragEnd += EndRect;
     }
 
     void OnDisable()
     {
-        input.OnBeginDrag -= BeginRect;
-        input.OnDragging -= UpdateRect;
-        input.OnEndDrag -= EndRect;
+        // REFATORAÇÃO: Desinscrever eventos via GameEvents
+        GameEvents.OnDragBegin -= BeginRect;
+        GameEvents.OnDragging -= UpdateRect;
+        GameEvents.OnDragEnd -= EndRect;
     }
 
     void BeginRect(Vector2 screenStart)

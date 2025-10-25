@@ -6,16 +6,27 @@ public static class UnitQueries
     /// <summary>
     /// Retorna as Units do jogador. Se você tiver uma lista do seu UnitRegistry,
     /// passe em <paramref name="source"/> para evitar varrer a cena.
-    /// Caso passe null, cai no fallback que varre a cena.
+    /// Caso passe null, cai no fallback otimizado que usa GetByFaction.
     /// </summary>
     public static IEnumerable<Unit> GetUnitsForPlayer(PlayerController player, IEnumerable<Unit> source = null)
     {
         if (player == null) yield break;
 
         var faction = player.myFaction;
-        IEnumerable<Unit> units = source ?? EnumerateSceneUnits();
 
-        foreach (var u in units)
+        // REFATORAÇÃO: Otimização - se source for null, usar diretamente GetByFaction (mais rápido)
+        if (source == null)
+        {
+            var directList = UnitRegistry.GetByFaction(faction);
+            foreach (var u in directList)
+            {
+                yield return u;
+            }
+            yield break;
+        }
+
+        // Caso contrário, filtrar source fornecido
+        foreach (var u in source)
             if (u != null && u.owner == faction)
                 yield return u;
     }

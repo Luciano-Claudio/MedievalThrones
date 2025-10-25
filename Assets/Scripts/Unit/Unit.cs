@@ -1,6 +1,10 @@
 ﻿using System;
 using UnityEngine;
 
+/// <summary>
+/// Classe base de unidade.
+/// REFATORADO (Lote 5): Dispara eventos de spawn/despawn automaticamente.
+/// </summary>
 [DisallowMultipleComponent]
 public class Unit : MonoBehaviour
 {
@@ -10,7 +14,7 @@ public class Unit : MonoBehaviour
     public float hp = 100, hpMax = 100;
 
     [Header("Seleção (visuais)")]
-    [SerializeField] GameObject selectionHighlight; // um “ring” ou outline
+    [SerializeField] GameObject selectionHighlight; // um "ring" ou outline
 
     [Header("Progressão")]
     [SerializeField] int level = 1;
@@ -24,10 +28,23 @@ public class Unit : MonoBehaviour
 
     public bool IsSelected { get; private set; }
 
-    public event Action<Unit, bool> OnSelectionChanged;
+    // REFATORAÇÃO: Eventos locais removidos, agora usa GameEvents (já implementado)
 
-    private void OnEnable() => UnitRegistry.Register(this);
-    private void OnDisable() => UnitRegistry.Unregister(this);
+    private void OnEnable()
+    {
+        UnitRegistry.Register(this);
+
+        // REFATORAÇÃO (Lote 5): Disparar evento de spawn
+        GameEvents.RaiseUnitSpawned(this);
+    }
+
+    private void OnDisable()
+    {
+        UnitRegistry.Unregister(this);
+
+        // REFATORAÇÃO (Lote 5): Disparar evento de despawn
+        GameEvents.RaiseUnitDespawned(this);
+    }
 
     public int Level => level;
     public float Xp => xp;
@@ -37,19 +54,17 @@ public class Unit : MonoBehaviour
     /// Fração 0..1 rumo ao próximo nível (para a barra)
     public float Xp01 => XpToNext <= 0f ? 0f : Mathf.Clamp01(xp / XpToNext);
 
-    /// Disparado quando XP ou level mudarem (UI se inscreve)
-    public event Action<Unit> OnProgressChanged;
-
     public void SetSelected(bool value)
     {
         if (IsSelected == value) return;
         IsSelected = value;
         if (selectionHighlight) selectionHighlight.SetActive(value);
-        OnSelectionChanged?.Invoke(this, value);
+
+        // REFATORAÇÃO: Usar GameEvents em vez de evento local (já implementado)
+        GameEvents.RaiseUnitSelectionChanged(this, value);
     }
 
-
-    // Helper para nome que a UI usa (caso você já tenha algo similar)
+    // Helper para nome que a UI usa
     public string DisplayName => def ? def.displayName : gameObject.name;
 
     /// Adiciona XP e lida com múltiplos ups (se ultrapassar)
@@ -66,16 +81,16 @@ public class Unit : MonoBehaviour
             level++;
         }
 
-        OnProgressChanged?.Invoke(this);
+        // REFATORAÇÃO: Usar GameEvents em vez de evento local (já implementado)
+        GameEvents.RaiseUnitProgressChanged(this);
     }
 
-
+#if UNITY_EDITOR
+    // REFATORAÇÃO: Método de debug movido para #if UNITY_EDITOR (já implementado)
     public void TestList()
     {
-        //var minhas = UnitRegistry.GetByFaction(FactionId.Player1);
-        //Debug.Log($"Player1 tem {minhas.Count} unidades");
-
         foreach (var u in UnitRegistry.All)
             Debug.Log($" - {u.DisplayName} (dono {u.owner})");
     }
+#endif
 }

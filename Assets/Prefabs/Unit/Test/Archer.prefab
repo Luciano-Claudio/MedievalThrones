@@ -236,15 +236,15 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: -8679921383154817045, guid: 48487090765532e489f91ad6477b27e4, type: 3}
       propertyPath: m_LocalPosition.x
-      value: 132.08667
+      value: 134.60236
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 48487090765532e489f91ad6477b27e4, type: 3}
       propertyPath: m_LocalPosition.y
-      value: -0.0000035762787
+      value: -0.0000071525574
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 48487090765532e489f91ad6477b27e4, type: 3}
       propertyPath: m_LocalPosition.z
-      value: 53.06163
+      value: 51.20489
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 48487090765532e489f91ad6477b27e4, type: 3}
       propertyPath: m_LocalRotation.w
@@ -277,6 +277,14 @@ PrefabInstance:
     - target: {fileID: 919132149155446097, guid: 48487090765532e489f91ad6477b27e4, type: 3}
       propertyPath: m_Name
       value: Archer
+      objectReference: {fileID: 0}
+    - target: {fileID: 5489523573692052732, guid: 48487090765532e489f91ad6477b27e4, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 0.61939985
+      objectReference: {fileID: 0}
+    - target: {fileID: 5489523573692052732, guid: 48487090765532e489f91ad6477b27e4, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0.24427383
       objectReference: {fileID: 0}
     - target: {fileID: 5866666021909216657, guid: 48487090765532e489f91ad6477b27e4, type: 3}
       propertyPath: m_Controller
