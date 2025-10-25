@@ -15600,12 +15600,4583 @@ void SaveLayout()
 - Estatísticas de produção por grupo
 
 ---
+# LOTE 5 (PARTE 2) — TOP HUD, BUTTON HUD & MINIMAPA
+
+**Versão:** 2.1 (Atualizada - Outubro 2025)  
+**Status:** 🔄 Parcialmente Implementado (Time/Minimapa) + 📐 Arquitetura Futura (Recursos/Comandos)  
+
+---
+
+## 📚 ÍNDICE COMPLETO
+
+### PARTE I: VISÃO GERAL
+1. [Introdução ao Subsistema de UI](#1-introdução-ao-subsistema-de-ui)
+2. [Arquitetura Event-Driven](#2-arquitetura-event-driven)
+3. [Estado Atual vs. Roadmap](#3-estado-atual-vs-roadmap)
+
+### PARTE II: TOP HUD (SISTEMA DE TEMPO)
+4. [TimeManager - Gerenciador de Tempo](#4-timemanager---gerenciador-de-tempo)
+5. [ClockUI - Display de Relógio](#5-clockui---display-de-relógio)
+6. [Integração Time/Clock via GameEvents](#6-integração-timeclock-via-gameevents)
+
+### PARTE III: TOP HUD (RECURSOS - ARQUITETURA FUTURA)
+7. [ResourceManager - Arquitetura Proposta](#7-resourcemanager---arquitetura-proposta)
+8. [ResourceDisplayUI - Display de Recursos](#8-resourcedisplayui---display-de-recursos)
+9. [Integração com GameEvents](#9-integração-com-gameevents)
+
+### PARTE IV: TOP HUD (RANKING & CHAT - ARQUITETURA FUTURA)
+10. [RankingSystem - Sistema de Ranking](#10-rankingsystem---sistema-de-ranking)
+11. [ChatSystem - Sistema de Chat](#11-chatsystem---sistema-de-chat)
+12. [UI Modular (Ranking/Chat)](#12-ui-modular-rankingchat)
+
+### PARTE V: BUTTON HUD (COMANDOS - ARQUITETURA FUTURA)
+13. [CommandController - Controlador de Comandos](#13-commandcontroller---controlador-de-comandos)
+14. [UnitActionButtons - Botões de Ação](#14-unitactionbuttons---botões-de-ação)
+15. [GroupHotkeyManager - Atalhos Ctrl+1~9](#15-grouphotkeymanager---atalhos-ctrl19)
+16. [Integração com SelectionManager](#16-integração-com-selectionmanager)
+
+### PARTE VI: MINIMAPA
+17. [MinimapController - Controlador Principal](#17-minimapcontroller---controlador-principal)
+18. [Sistema de Ícones e Pool](#18-sistema-de-ícones-e-pool)
+19. [Zoom e Navegação](#19-zoom-e-navegação)
+20. [Click-to-Move (Go To)](#20-click-to-move-go-to)
+21. [DisableMinimapShadows - Otimização](#21-disableminimapshadows---otimização)
+
+### PARTE VII: INTEGRAÇÃO E PATTERNS
+22. [FactionDatabase - Sistema de Facções](#22-factiondatabase---sistema-de-facções)
+23. [Event Bus Integration](#23-event-bus-integration)
+24. [Fluxo de Inicialização Completo](#24-fluxo-de-inicialização-completo)
+
+### PARTE VIII: IMPLEMENTAÇÃO E MANUTENÇÃO
+25. [Roadmap de Implementação](#25-roadmap-de-implementação)
+26. [Estrutura de Arquivos](#26-estrutura-de-arquivos)
+27. [Solução de Problemas](#27-solução-de-problemas)
+28. [Checklist de Validação](#28-checklist-de-validação)
+29. [Melhorias Sugeridas](#29-melhorias-sugeridas)
+
+---
+
+# PARTE I: VISÃO GERAL
+
+---
+
+## 1) INTRODUÇÃO AO SUBSISTEMA DE UI
+
+### 1.1 Objetivo
+
+O **Lote 5 (Parte 2)** complementa a documentação da interface do usuário do Medieval Thrones, cobrindo três subsistemas críticos:
+
+- **Top HUD**: Informações persistentes (tempo, recursos, ranking, chat)
+- **Button HUD**: Ações de comando (mover, atacar, formações) e hotkeys de grupo
+- **Minimapa**: Navegação espacial e visão estratégica
+
+### 1.2 Arquitetura Geral
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                      GameEvents (Event Bus)              │
+│  - OnTimeOfDay / OnClockChanged                         │
+│  - OnResourceChanged (futuro)                           │
+│  - OnUnitSpawned / OnUnitDespawned                      │
+│  - OnSelectionChanged                                    │
+└────────────────┬────────────────────────────────────────┘
+                 │
+    ┌────────────┼────────────┬───────────────┐
+    ↓            ↓            ↓               ↓
+┌─────────┐ ┌─────────┐ ┌──────────┐ ┌──────────────┐
+│ Top HUD │ │Button   │ │ Minimapa │ │ Left Bar     │
+│         │ │  HUD    │ │          │ │ (Parte 1)    │
+├─────────┤ ├─────────┤ ├──────────┤ ├──────────────┤
+│ Clock   │ │Command  │ │ Icons    │ │ UnitList     │
+│Resource │ │Buttons  │ │ Zoom     │ │ Groups       │
+│Ranking  │ │Hotkeys  │ │ Click-To │ │ Drag-n-Drop  │
+│ Chat    │ │         │ │  -Move   │ │              │
+└─────────┘ └─────────┘ └──────────┘ └──────────────┘
+```
+
+### 1.3 Estado Atual vs. Futuro
+
+| Componente | Status | Código Disponível | Prioridade |
+|------------|--------|-------------------|------------|
+| **TimeManager** | ✅ Implementado | `TimeManager.cs` | - |
+| **ClockUI** | ✅ Implementado | `ClockUI.cs` | - |
+| **MinimapController** | ✅ Implementado | `MinimapController.cs` | - |
+| **FactionDatabase** | ✅ Implementado | `FactionDatabase.cs` | - |
+| **ResourceManager** | ⏳ Futuro | Arquitetura proposta | Alta |
+| **CommandController** | ⏳ Futuro | Arquitetura proposta | Alta |
+| **RankingSystem** | ⏳ Futuro | Arquitetura proposta | Média |
+| **ChatSystem** | ⏳ Futuro | Arquitetura proposta | Baixa |
+| **InputManager** | ⏳ Futuro | Arquitetura proposta | Alta |
+
+### 1.4 Princípios de Design
+
+✅ **Event-Driven**: Comunicação via `GameEvents` (Lote 1)  
+✅ **Modular**: Componentes independentes e reutilizáveis  
+✅ **Escalável**: Fácil adicionar novos recursos/comandos  
+✅ **Performático**: Pooling de ícones, updates otimizados  
+✅ **Testável**: Lógica separada de visual  
+
+---
+
+## 2) ARQUITETURA EVENT-DRIVEN
+
+### 2.1 Fluxo de Comunicação
+
+```
+[Fonte de Dados]
+    │
+    ↓ (dispara evento)
+GameEvents.RaiseXXX(data)
+    │
+    ↓ (múltiplos listeners)
+├─→ TopHUD.OnXXX(data)
+├─→ ButtonHUD.OnXXX(data)
+├─→ Minimap.OnXXX(data)
+└─→ [Outros sistemas]
+```
+
+**Benefícios:**
+- 🔌 **Desacoplamento**: Sistemas não se referenciam diretamente
+- 🔄 **Reatividade**: UI atualiza automaticamente
+- 🧩 **Extensibilidade**: Adicionar listeners sem modificar emissores
+- 🧪 **Testabilidade**: Emitir eventos de teste facilmente
+
+### 2.2 Eventos Utilizados (Top HUD & Minimapa)
+
+#### Eventos de Tempo
+
+```csharp
+// TimeManager → ClockUI
+GameEvents.OnTimeOfDay      // (float time01) - Todo frame
+GameEvents.OnDayChanged      // (int dayCount) - Ao virar o dia
+GameEvents.OnClockChanged    // (int day, int hour, int minute) - A cada minuto
+```
+
+#### Eventos de Unidades
+
+```csharp
+// UnitRegistry → MinimapController
+GameEvents.OnUnitSpawned     // (Unit unit) - Ao spawnar
+GameEvents.OnUnitDespawned   // (Unit unit) - Ao despawnar
+```
+
+#### Eventos de Seleção (futura integração Button HUD)
+
+```csharp
+// SelectionManager → ButtonHUD
+GameEvents.OnSelectionChanged // (IReadOnlyCollection<Unit> selection)
+```
+
+#### Eventos Futuros (Recursos, Ranking, Chat)
+
+```csharp
+// ResourceManager → ResourceDisplayUI (proposto)
+GameEvents.OnResourceChanged  // (ResourceType type, int amount)
+
+// RankingSystem → RankingUI (proposto)
+GameEvents.OnRankingUpdated   // (List<RankEntry> rankings)
+
+// ChatSystem → ChatUI (proposto)
+GameEvents.OnChatMessageReceived // (ChatMessage message)
+```
+
+### 2.3 Padrão Observer (Event Bus)
+
+**Implementação no GameEvents (Lote 1):**
+
+```csharp
+// GameEvents.cs (resumo)
+public static class GameEvents
+{
+    // Eventos de Tempo
+    public static event System.Action<float> OnTimeOfDay;
+    public static event System.Action<int> OnDayChanged;
+    public static event System.Action<int, int, int> OnClockChanged;
+    
+    // Métodos de Disparo
+    public static void RaiseTimeOfDay(float time01)
+    {
+        OnTimeOfDay?.Invoke(time01);
+    }
+    
+    public static void RaiseDayChanged(int dayCount)
+    {
+        OnDayChanged?.Invoke(dayCount);
+    }
+    
+    public static void RaiseClockChanged(int day, int hour, int minute)
+    {
+        OnClockChanged?.Invoke(day, hour, minute);
+    }
+}
+```
+
+**Uso em Componentes:**
+
+```csharp
+// Emissor (TimeManager)
+void Update()
+{
+    // ... lógica de tempo ...
+    GameEvents.RaiseClockChanged(DayCount, Hour, Minute);
+}
+
+// Listener (ClockUI)
+void OnEnable()
+{
+    GameEvents.OnClockChanged += UpdateClock;
+}
+
+void OnDisable()
+{
+    GameEvents.OnClockChanged -= UpdateClock; // CRÍTICO: Sempre desinscrever
+}
+
+void UpdateClock(int day, int hour, int minute)
+{
+    // Atualizar UI
+}
+```
+
+---
+
+## 3) ESTADO ATUAL VS. ROADMAP
+
+### 3.1 Hierarquia de UI (Atual)
+
+**Baseado no screenshot fornecido:**
+
+```
+Canvas (CanvasUI)
+├── TopHud (GameObject)
+│   ├── Clock (GameObject) ✅ IMPLEMENTADO
+│   │   ├── Day (TMP_Text) → "Day 0"
+│   │   └── Time (TMP_Text) → "Time 00:00"
+│   ├── Online (GameObject) ⏳ FUTURO
+│   │   ├── Ranking (Button)
+│   │   └── Chat (Button)
+│   └── Resource (GameObject) ⏳ FUTURO
+│       ├── Gold (TMP_Text + Icon)
+│       ├── Wood (TMP_Text + Icon)
+│       └── Food (TMP_Text + Icon)
+│
+├── LeftBar (GameObject) ✅ DOCUMENTADO (Parte 1)
+│   ├── Button (GameObject)
+│   ├── DragRoot (GameObject)
+│   ├── Menu (GameObject)
+│   ├── UnitList (ScrollRect)
+│   └── CreateGroup (GameObject)
+│
+├── BottomBar (GameObject) ⏳ FUTURO
+│   ├── Hud (GameObject)
+│   │   └── Image (RawImage) → Portrait da unidade
+│   └── Buttons (GameObject) → Comandos de ação
+│
+├── Minimap (GameObject) ✅ IMPLEMENTADO
+│   ├── Mask (Image)
+│   └── Buttons (GameObject) → Zoom In/Out
+│
+└── EventSystem (GameObject) ✅ EXISTENTE
+```
+
+### 3.2 Roadmap de Implementação
+
+#### FASE 1: Sistemas Core (ATUAL)
+- [x] TimeManager + ClockUI (completo)
+- [x] MinimapController (completo)
+- [x] FactionDatabase (completo)
+- [x] UnitListPanel (Parte 1 - completo)
+
+#### FASE 2: Recursos e Economia (PRÓXIMA PRIORIDADE)
+- [ ] ResourceManager (gerenciamento de ouro/madeira/comida)
+- [ ] ResourceDisplayUI (display no Top HUD)
+- [ ] Integração com construções/unidades (consumo/produção)
+
+#### FASE 3: Comandos e Ações (ALTA PRIORIDADE)
+- [ ] CommandController (sistema de comandos)
+- [ ] UnitActionButtons (botões Move/Attack/Defend)
+- [ ] InputManager (hotkeys Ctrl+1~9)
+- [ ] GroupHotkeyManager (atalhos de grupo)
+
+#### FASE 4: Social e Multiplayer (MÉDIA PRIORIDADE)
+- [ ] RankingSystem (placar de jogadores)
+- [ ] RankingUI (display no Top HUD)
+- [ ] ChatSystem (mensagens multiplayer)
+- [ ] ChatUI (interface de chat)
+
+#### FASE 5: Polimento e UX (BAIXA PRIORIDADE)
+- [ ] Notificações (alertas de eventos)
+- [ ] Tooltips (informações ao hover)
+- [ ] Animações de transição
+- [ ] Feedback visual (flash, shake)
+
+---
+
+# PARTE II: TOP HUD (SISTEMA DE TEMPO)
+
+---
+
+## 4) TIMEMANAGER - GERENCIADOR DE TEMPO
+
+### 4.1 Visão Geral
+
+**Tipo:** `MonoBehaviour`  
+**Arquivo:** `TimeManager.cs`  
+**Responsabilidade:** Gerencia o relógio global do jogo, avançando o tempo e disparando eventos.
+
+### 4.2 Estrutura da Classe
+
+```csharp
+/// <summary>
+/// Avança o relógio global e emite eventos de tempo.
+/// Sistema completo de dia/noite com conversão para HH:MM.
+/// </summary>
+public class TimeManager : MonoBehaviour
+{
+    // ========== CONFIGURAÇÃO ==========
+    public GameConfig config;                    // Configuração global (SecondsPerDay, etc)
+    [Range(0f, 1f)] public float startTime01 = 0.25f; // Tempo inicial (0.25 = ~06:00)
+    
+    // ========== PROPRIEDADES PÚBLICAS ==========
+    [field: SerializeField]
+    public float Time01 { get; private set; }    // Fração do dia (0.0 = 00:00, 0.5 = 12:00)
+    
+    [field: SerializeField]
+    public int DayCount { get; private set; }    // Contador de dias
+    
+    [field: SerializeField]
+    public int Hour { get; private set; }        // Hora atual (0-23)
+    
+    [field: SerializeField]
+    public int Minute { get; private set; }      // Minuto atual (0-59)
+    
+    // ========== ESTADO INTERNO ==========
+    private int _lastMinute = -1;                // Para disparar evento só quando muda
+    
+    // ========== MÉTODOS ==========
+    void Awake() { /* inicialização */ }
+    void Update() { /* avança tempo */ }
+    public bool IsNight() { /* verifica se é noite */ }
+}
+```
+
+### 4.3 Inicialização
+
+```csharp
+/// <summary>
+/// Inicializa o tempo e dispara evento inicial.
+/// </summary>
+void Awake()
+{
+    Time01 = Mathf.Repeat(startTime01, 1f); // Normaliza entre 0-1
+    GameEvents.RaiseTimeOfDay(Time01);       // Dispara evento inicial
+}
+```
+
+**Explicação:**
+- `startTime01 = 0.25` → 25% do dia → ~06:00 (amanhecer)
+- `Mathf.Repeat()` garante que o valor esteja entre 0-1
+- Evento inicial sincroniza sistemas dependentes (iluminação, skybox)
+
+### 4.4 Avanço de Tempo
+
+```csharp
+/// <summary>
+/// Avança o tempo a cada frame e dispara eventos.
+/// </summary>
+void Update()
+{
+    if (config == null) return;
+    
+    // 1. Calcular delta de tempo (fração do dia por frame)
+    var delta01 = Time.deltaTime / Mathf.Max(1f, config.SecondsPerDay);
+    var old = Time01;
+    
+    // 2. Avançar tempo (com wrap em 1.0)
+    Time01 = Mathf.Repeat(Time01 + delta01, 1f);
+    
+    // 3. Verificar mudança de dia
+    if (Time01 < old) // Houve wrap (passou de 1.0 para 0.0)
+    {
+        DayCount++;
+        GameEvents.RaiseDayChanged(DayCount);
+    }
+    
+    // 4. Converter fração para HH:MM (24h)
+    int totalMinutes = Mathf.FloorToInt(Time01 * 1440f); // 24h * 60min = 1440
+    Hour = (totalMinutes / 60) % 24;   // Hora (0-23)
+    Minute = totalMinutes % 60;        // Minuto (0-59)
+    
+    // 5. Disparar evento de relógio (apenas quando minuto muda)
+    if (Minute != _lastMinute)
+    {
+        _lastMinute = Minute;
+        GameEvents.RaiseClockChanged(DayCount, Hour, Minute);
+    }
+    
+    // 6. Disparar evento de fração do dia (todo frame)
+    GameEvents.RaiseTimeOfDay(Time01);
+}
+```
+
+**Explicação do Cálculo:**
+
+```
+SecondsPerDay = 600 segundos (10 minutos reais = 1 dia in-game)
+deltaTime = 0.016s (60 FPS)
+delta01 = 0.016 / 600 = 0.0000267 (avanço por frame)
+
+Time01 = 0.0 → 00:00 (meia-noite)
+Time01 = 0.25 → 06:00 (amanhecer)
+Time01 = 0.5 → 12:00 (meio-dia)
+Time01 = 0.75 → 18:00 (entardecer)
+Time01 = 1.0 → 00:00 (meia-noite novamente)
+
+totalMinutes = 0.5 * 1440 = 720 min
+Hour = 720 / 60 = 12
+Minute = 720 % 60 = 0
+→ 12:00
+```
+
+### 4.5 Verificação de Noite
+
+```csharp
+/// <summary>
+/// Verifica se o horário atual é noite.
+/// Baseado em config.dayFraction (ex: 0.5 = noite começa ao meio-dia).
+/// </summary>
+public bool IsNight()
+{
+    // Ex.: dayFraction = 0.5
+    // Noite = [0.5, 1.0) (12:00 até 00:00)
+    return Time01 >= config.dayFraction;
+}
+```
+
+**Uso:**
+
+```csharp
+// Em outro sistema (ex: EnemyAI)
+if (timeManager.IsNight())
+{
+    // Aumentar spawn de inimigos noturnos
+}
+```
+
+### 4.6 Propriedades Públicas
+
+| Propriedade | Tipo | Descrição |
+|-------------|------|-----------|
+| `Time01` | `float` | Fração do dia (0.0 = 00:00, 1.0 = 24:00) |
+| `DayCount` | `int` | Contador de dias (começa em 0) |
+| `Hour` | `int` | Hora atual (0-23) |
+| `Minute` | `int` | Minuto atual (0-59) |
+
+### 4.7 Eventos Disparados
+
+```csharp
+// Todo frame (para iluminação/skybox)
+GameEvents.RaiseTimeOfDay(Time01);
+
+// Quando dia vira (00:00)
+GameEvents.RaiseDayChanged(DayCount);
+
+// A cada minuto (para relógio UI)
+GameEvents.RaiseClockChanged(DayCount, Hour, Minute);
+```
+
+### 4.8 Integração com GameConfig
+
+**GameConfig.cs (resumo):**
+
+```csharp
+[CreateAssetMenu(fileName = "GameConfig", menuName = "Game/Config")]
+public class GameConfig : ScriptableObject
+{
+    [Header("Time Settings")]
+    public float SecondsPerDay = 600f;     // 10 minutos reais = 1 dia in-game
+    [Range(0f, 1f)] public float dayFraction = 0.5f; // 0.5 = noite começa ao meio-dia
+}
+```
+
+**Setup no Inspector:**
+
+```
+TimeManager (GameObject)
+├── TimeManager (MonoBehaviour)
+│   ├── config: GameConfig (ScriptableObject)
+│   └── startTime01: 0.25 (amanhecer)
+```
+
+### 4.9 Diagrama de Fluxo
+
+```
+[TimeManager.Update()]
+    │
+    ├─→ Calcular delta01 (Time.deltaTime / SecondsPerDay)
+    │
+    ├─→ Avançar Time01 (wrap em 1.0)
+    │
+    ├─→ if (Time01 < old):
+    │       DayCount++
+    │       GameEvents.RaiseDayChanged(DayCount)
+    │
+    ├─→ Converter Time01 → HH:MM
+    │
+    ├─→ if (Minute != _lastMinute):
+    │       GameEvents.RaiseClockChanged(Day, Hour, Minute)
+    │
+    └─→ GameEvents.RaiseTimeOfDay(Time01)
+```
+
+---
+
+## 5) CLOCKUI - DISPLAY DE RELÓGIO
+
+### 5.1 Visão Geral
+
+**Tipo:** `MonoBehaviour`  
+**Arquivo:** `ClockUI.cs`  
+**Responsabilidade:** Exibe o relógio (dia e hora) no Top HUD. Escuta `GameEvents.OnClockChanged` e atualiza UI.
+
+### 5.2 Estrutura da Classe
+
+```csharp
+/// <summary>
+/// Display do relógio no Top HUD.
+/// REFATORADO: Usa GameEvents em vez de polling.
+/// </summary>
+public class ClockUI : MonoBehaviour
+{
+    // ========== REFS ==========
+    public TimeManager timeManager;   // Referência (usado apenas no Start)
+    public TMP_Text clockText;        // "Time 12:34"
+    public TMP_Text dayText;          // "Day 5"
+    
+    // ========== CACHE LOCAL ==========
+    private int day, hour, minute;
+    
+    // ========== MÉTODOS ==========
+    void OnEnable() { /* subscribe */ }
+    void OnDisable() { /* unsubscribe */ }
+    void Start() { /* sincronização inicial */ }
+    void Update() { /* atualiza texto */ }
+    public void UpdateClock(int day, int hour, int minute) { /* handler */ }
+}
+```
+
+### 5.3 Subscrição de Eventos
+
+```csharp
+/// <summary>
+/// Inscreve no evento OnClockChanged.
+/// CRÍTICO: Sempre desinscrever em OnDisable.
+/// </summary>
+void OnEnable()
+{
+    GameEvents.OnClockChanged += UpdateClock;
+}
+
+void OnDisable()
+{
+    GameEvents.OnClockChanged -= UpdateClock; // Evita memory leak
+}
+```
+
+**Importância:**
+- ✅ **Performance**: Não precisa poll `TimeManager` todo frame
+- ✅ **Desacoplamento**: `ClockUI` não referencia `TimeManager` diretamente (exceto no `Start`)
+- ⚠️ **Memory Leak**: Sempre desinscrever em `OnDisable`
+
+### 5.4 Sincronização Inicial
+
+```csharp
+/// <summary>
+/// Sincroniza estado inicial do relógio.
+/// Necessário porque OnEnable pode vir antes do primeiro evento.
+/// </summary>
+void Start()
+{
+    if (timeManager != null)
+    {
+        UpdateClock(timeManager.DayCount, timeManager.Hour, timeManager.Minute);
+    }
+}
+```
+
+**Por que é necessário?**
+
+```
+Timeline:
+1. ClockUI.OnEnable() → Subscribe em OnClockChanged
+2. ClockUI.Start() → Sincronizar estado inicial
+3. TimeManager.Update() → Primeiro evento disparado
+
+Sem o Start():
+- UI ficaria com "Day 0, Time 00:00" até o próximo minuto
+```
+
+### 5.5 Handler de Evento
+
+```csharp
+/// <summary>
+/// Handler de GameEvents.OnClockChanged.
+/// Apenas cacheia valores (Update renderiza).
+/// </summary>
+public void UpdateClock(int day, int hour, int minute)
+{
+    this.day = day;
+    this.hour = hour;
+    this.minute = minute;
+}
+```
+
+### 5.6 Renderização (Update)
+
+```csharp
+/// <summary>
+/// Atualiza textos a cada frame.
+/// NOTA: Poderia ser otimizado para só atualizar quando valores mudam.
+/// </summary>
+void Update()
+{
+    if (clockText)
+        clockText.text = $"Time {hour:00}:{minute:00}";
+    
+    if (dayText)
+        dayText.text = $"Day {day}";
+}
+```
+
+**Otimização Futura:**
+
+```csharp
+// Otimizado: só atualiza quando valores mudam
+public void UpdateClock(int day, int hour, int minute)
+{
+    bool changed = (this.day != day || this.hour != hour || this.minute != minute);
+    
+    this.day = day;
+    this.hour = hour;
+    this.minute = minute;
+    
+    if (changed)
+    {
+        RenderClock();
+    }
+}
+
+void RenderClock()
+{
+    if (clockText) clockText.text = $"Time {hour:00}:{minute:00}";
+    if (dayText) dayText.text = $"Day {day}";
+}
+```
+
+### 5.7 Setup no Inspector
+
+```
+TopHud (GameObject)
+└── Clock (GameObject)
+    ├── ClockUI (MonoBehaviour)
+    │   ├── timeManager: TimeManager (Scene Reference)
+    │   ├── clockText: Time (TMP_Text)
+    │   └── dayText: Day (TMP_Text)
+    │
+    ├── Day (TMP_Text)
+    │   └── Text: "Day 0"
+    │
+    └── Time (TMP_Text)
+        └── Text: "Time 00:00"
+```
+
+### 5.8 Fluxo Completo
+
+```
+[TimeManager.Update()]
+    │
+    ├─→ Minute mudou?
+    │   ├─→ Sim: GameEvents.RaiseClockChanged(Day, Hour, Minute)
+    │   │       │
+    │   │       ↓
+    │   │   [ClockUI.UpdateClock(day, hour, minute)]
+    │   │       │
+    │   │       ├─→ Cachear valores (this.day = day, etc)
+    │   │       │
+    │   │       └─→ [ClockUI.Update()]
+    │   │               │
+    │   │               └─→ Atualizar textos na UI
+    │   │
+    │   └─→ Não: Continue
+    │
+    └─→ [Fim do frame]
+```
+
+---
+
+## 6) INTEGRAÇÃO TIME/CLOCK VIA GAMEEVENTS
+
+### 6.1 Diagrama de Integração
+
+```
+┌──────────────────────────────────────────────────────────┐
+│                  TimeManager (Emissor)                    │
+│  ┌──────────────────────────────────────────────┐        │
+│  │ Update()                                      │        │
+│  │   ├─> Avançar Time01                         │        │
+│  │   ├─> Converter para HH:MM                   │        │
+│  │   └─> if (Minute != _lastMinute):            │        │
+│  │           GameEvents.RaiseClockChanged(...)  │────┐   │
+│  └──────────────────────────────────────────────┘    │   │
+└──────────────────────────────────────────────────────┼───┘
+                                                       │
+                    ┌──────────────────────────────────┘
+                    │ (Event Bus)
+                    ↓
+┌──────────────────────────────────────────────────────────┐
+│              GameEvents (Mediador)                        │
+│  public static event Action<int,int,int> OnClockChanged; │
+│  public static void RaiseClockChanged(day, hour, min)    │
+└────────────────────┬─────────────────────────────────────┘
+                     │
+        ┌────────────┼────────────┬─────────────┐
+        │            │            │             │
+        ↓            ↓            ↓             ↓
+┌────────────┐ ┌─────────┐ ┌─────────┐ ┌──────────────┐
+│  ClockUI   │ │Lighting │ │ SkyBox  │ │ [Futuro]     │
+│  (Display) │ │ System  │ │ Control │ │ AI Behavior  │
+└────────────┘ └─────────┘ └─────────┘ └──────────────┘
+```
+
+### 6.2 Código Completo da Integração
+
+**GameEvents.cs (Lote 1):**
+
+```csharp
+public static class GameEvents
+{
+    // ========== EVENTOS DE TEMPO ==========
+    public static event System.Action<float> OnTimeOfDay;
+    public static event System.Action<int> OnDayChanged;
+    public static event System.Action<int, int, int> OnClockChanged;
+    
+    // ========== MÉTODOS DE DISPARO ==========
+    public static void RaiseTimeOfDay(float time01)
+    {
+        OnTimeOfDay?.Invoke(time01);
+    }
+    
+    public static void RaiseDayChanged(int dayCount)
+    {
+        OnDayChanged?.Invoke(dayCount);
+    }
+    
+    public static void RaiseClockChanged(int day, int hour, int minute)
+    {
+        OnClockChanged?.Invoke(day, hour, minute);
+    }
+}
+```
+
+**TimeManager.cs (Emissor):**
+
+```csharp
+public class TimeManager : MonoBehaviour
+{
+    void Update()
+    {
+        // ... avanço de tempo ...
+        
+        // Disparar evento de relógio
+        if (Minute != _lastMinute)
+        {
+            _lastMinute = Minute;
+            GameEvents.RaiseClockChanged(DayCount, Hour, Minute);
+        }
+        
+        // Disparar evento de fração do dia
+        GameEvents.RaiseTimeOfDay(Time01);
+    }
+}
+```
+
+**ClockUI.cs (Listener):**
+
+```csharp
+public class ClockUI : MonoBehaviour
+{
+    void OnEnable()
+    {
+        GameEvents.OnClockChanged += UpdateClock;
+    }
+    
+    void OnDisable()
+    {
+        GameEvents.OnClockChanged -= UpdateClock;
+    }
+    
+    public void UpdateClock(int day, int hour, int minute)
+    {
+        this.day = day;
+        this.hour = hour;
+        this.minute = minute;
+    }
+}
+```
+
+### 6.3 Vantagens da Arquitetura
+
+**Desacoplamento:**
+```csharp
+// SEM Event Bus (acoplado)
+public class ClockUI : MonoBehaviour
+{
+    public TimeManager timeManager; // Dependência direta
+    
+    void Update()
+    {
+        day = timeManager.DayCount;     // Poll constante
+        hour = timeManager.Hour;
+        minute = timeManager.Minute;
+    }
+}
+
+// COM Event Bus (desacoplado)
+public class ClockUI : MonoBehaviour
+{
+    // Nenhuma dependência direta no Update
+    
+    void OnEnable()
+    {
+        GameEvents.OnClockChanged += UpdateClock; // Subscribe uma vez
+    }
+}
+```
+
+**Extensibilidade:**
+```csharp
+// Adicionar novo sistema sem modificar TimeManager
+public class NPCBehavior : MonoBehaviour
+{
+    void OnEnable()
+    {
+        GameEvents.OnTimeOfDay += OnTimeChanged;
+    }
+    
+    void OnTimeChanged(float time01)
+    {
+        if (time01 > 0.75f) // Noite
+        {
+            GoToSleep();
+        }
+    }
+}
+```
+
+### 6.4 Exemplo de Múltiplos Listeners
+
+```csharp
+// TimeManager dispara evento
+GameEvents.RaiseTimeOfDay(0.8f); // 19:12 (noite)
+
+// Múltiplos sistemas reagem:
+
+// 1. Iluminação
+public class LightingController : MonoBehaviour
+{
+    void OnTimeChanged(float time01)
+    {
+        directionalLight.intensity = Mathf.Lerp(0.1f, 1.0f, time01);
+    }
+}
+
+// 2. Skybox
+public class SkyboxController : MonoBehaviour
+{
+    void OnTimeChanged(float time01)
+    {
+        RenderSettings.skybox.SetFloat("_Rotation", time01 * 360f);
+    }
+}
+
+// 3. AI Behavior
+public class EnemySpawner : MonoBehaviour
+{
+    void OnTimeChanged(float time01)
+    {
+        if (time01 > 0.75f) // Noite
+        {
+            spawnRate *= 2f; // Mais inimigos à noite
+        }
+    }
+}
+
+// 4. Clock UI
+public class ClockUI : MonoBehaviour
+{
+    void OnTimeChanged(float time01)
+    {
+        // Atualiza relógio (via OnClockChanged)
+    }
+}
+```
+
+---
+
+# PARTE III: TOP HUD (RECURSOS - ARQUITETURA FUTURA)
+
+---
+
+## 7) RESOURCEMANAGER - ARQUITETURA PROPOSTA
+
+### 7.1 Visão Geral
+
+**Tipo:** `MonoBehaviour` (Singleton)  
+**Arquivo:** `ResourceManager.cs` (a ser implementado)  
+**Responsabilidade:** Gerencia recursos do jogador (ouro, madeira, comida). Dispara eventos ao mudar valores.
+
+### 7.2 Estrutura Proposta
+
+```csharp
+/// <summary>
+/// Gerenciador de recursos do jogador.
+/// Sistema centralizado com eventos para atualizações de UI.
+/// </summary>
+public class ResourceManager : MonoBehaviour
+{
+    // ========== SINGLETON ==========
+    public static ResourceManager Instance { get; private set; }
+    
+    // ========== RECURSOS INICIAIS ==========
+    [Header("Starting Resources")]
+    [SerializeField] private int startingGold = 1000;
+    [SerializeField] private int startingWood = 500;
+    [SerializeField] private int startingFood = 300;
+    
+    // ========== ESTADO ATUAL ==========
+    private Dictionary<ResourceType, int> _resources = new();
+    
+    // ========== PROPRIEDADES ==========
+    public int Gold => GetResource(ResourceType.Gold);
+    public int Wood => GetResource(ResourceType.Wood);
+    public int Food => GetResource(ResourceType.Food);
+    
+    // ========== MÉTODOS ==========
+    void Awake() { /* setup singleton */ }
+    void Start() { /* inicializar recursos */ }
+    public int GetResource(ResourceType type) { /* consulta */ }
+    public bool HasResources(Dictionary<ResourceType, int> cost) { /* verificação */ }
+    public bool TrySpendResources(Dictionary<ResourceType, int> cost) { /* gastar */ }
+    public void AddResource(ResourceType type, int amount) { /* adicionar */ }
+    void SetResource(ResourceType type, int amount) { /* interno */ }
+}
+
+/// <summary>
+/// Tipos de recursos disponíveis.
+/// </summary>
+public enum ResourceType
+{
+    Gold,
+    Wood,
+    Food
+}
+```
+
+### 7.3 Singleton Pattern
+
+```csharp
+void Awake()
+{
+    // Singleton pattern
+    if (Instance != null && Instance != this)
+    {
+        Destroy(gameObject);
+        return;
+    }
+    
+    Instance = this;
+    DontDestroyOnLoad(gameObject); // Opcional (se recursos persistem entre cenas)
+}
+```
+
+### 7.4 Inicialização
+
+```csharp
+void Start()
+{
+    // Inicializar recursos
+    _resources[ResourceType.Gold] = startingGold;
+    _resources[ResourceType.Wood] = startingWood;
+    _resources[ResourceType.Food] = startingFood;
+    
+    // Disparar eventos iniciais
+    GameEvents.RaiseResourceChanged(ResourceType.Gold, startingGold);
+    GameEvents.RaiseResourceChanged(ResourceType.Wood, startingWood);
+    GameEvents.RaiseResourceChanged(ResourceType.Food, startingFood);
+}
+```
+
+### 7.5 Consulta de Recursos
+
+```csharp
+/// <summary>
+/// Retorna quantidade atual de um recurso.
+/// </summary>
+public int GetResource(ResourceType type)
+{
+    return _resources.TryGetValue(type, out int amount) ? amount : 0;
+}
+
+/// <summary>
+/// Verifica se o jogador tem recursos suficientes.
+/// </summary>
+/// <param name="cost">Dicionário de custos (ex: {Gold: 100, Wood: 50})</param>
+public bool HasResources(Dictionary<ResourceType, int> cost)
+{
+    foreach (var kvp in cost)
+    {
+        if (GetResource(kvp.Key) < kvp.Value)
+            return false;
+    }
+    return true;
+}
+```
+
+### 7.6 Gastar Recursos
+
+```csharp
+/// <summary>
+/// Tenta gastar recursos. Retorna true se bem-sucedido.
+/// Dispara eventos de mudança.
+/// </summary>
+public bool TrySpendResources(Dictionary<ResourceType, int> cost)
+{
+    // Verificar se tem recursos suficientes
+    if (!HasResources(cost))
+        return false;
+    
+    // Gastar recursos
+    foreach (var kvp in cost)
+    {
+        int current = GetResource(kvp.Key);
+        SetResource(kvp.Key, current - kvp.Value);
+    }
+    
+    return true;
+}
+```
+
+### 7.7 Adicionar Recursos
+
+```csharp
+/// <summary>
+/// Adiciona recursos (ex: ao coletar madeira, construir fazenda).
+/// Dispara eventos de mudança.
+/// </summary>
+public void AddResource(ResourceType type, int amount)
+{
+    if (amount <= 0) return;
+    
+    int current = GetResource(type);
+    SetResource(type, current + amount);
+}
+```
+
+### 7.8 Método Interno (Set)
+
+```csharp
+/// <summary>
+/// Define valor de um recurso e dispara evento.
+/// </summary>
+void SetResource(ResourceType type, int amount)
+{
+    amount = Mathf.Max(0, amount); // Não permite valores negativos
+    
+    _resources[type] = amount;
+    
+    // Disparar evento
+    GameEvents.RaiseResourceChanged(type, amount);
+}
+```
+
+### 7.9 Eventos Disparados
+
+```csharp
+// Ao mudar qualquer recurso
+GameEvents.RaiseResourceChanged(ResourceType type, int amount);
+
+// Exemplo de uso:
+SetResource(ResourceType.Gold, 1500);
+// → GameEvents.RaiseResourceChanged(ResourceType.Gold, 1500)
+//   → ResourceDisplayUI.OnResourceChanged(Gold, 1500)
+//   → Atualiza texto "1500" no Gold icon
+```
+
+### 7.10 Exemplo de Uso
+
+```csharp
+// Em BuildingConstructor
+public class BuildingConstructor : MonoBehaviour
+{
+    public void TryBuildBarracks()
+    {
+        var cost = new Dictionary<ResourceType, int>
+        {
+            { ResourceType.Gold, 200 },
+            { ResourceType.Wood, 150 }
+        };
+        
+        if (ResourceManager.Instance.TrySpendResources(cost))
+        {
+            // Construir quartel
+            Instantiate(barracksPrefab, buildPosition, Quaternion.identity);
+            Debug.Log("Barracks constructed!");
+        }
+        else
+        {
+            Debug.Log("Not enough resources!");
+            // Exibir feedback visual (UI shake, som de erro)
+        }
+    }
+}
+
+// Em ResourceCollector (ex: trabalhador cortando árvore)
+public class ResourceCollector : MonoBehaviour
+{
+    void OnTreeHarvested()
+    {
+        ResourceManager.Instance.AddResource(ResourceType.Wood, 10);
+        // → GameEvents.RaiseResourceChanged(Wood, currentAmount + 10)
+    }
+}
+```
+
+### 7.11 Integração com GameEvents (a ser adicionado no Lote 1)
+
+```csharp
+// GameEvents.cs (adicionar)
+public static class GameEvents
+{
+    // ========== EVENTOS DE RECURSOS ==========
+    public static event System.Action<ResourceType, int> OnResourceChanged;
+    
+    // ========== MÉTODOS DE DISPARO ==========
+    public static void RaiseResourceChanged(ResourceType type, int amount)
+    {
+        OnResourceChanged?.Invoke(type, amount);
+    }
+}
+```
+
+---
+
+## 8) RESOURCEDISPLAYUI - DISPLAY DE RECURSOS
+
+### 8.1 Visão Geral
+
+**Tipo:** `MonoBehaviour`  
+**Arquivo:** `ResourceDisplayUI.cs` (a ser implementado)  
+**Responsabilidade:** Exibe recursos (ouro, madeira, comida) no Top HUD. Escuta `GameEvents.OnResourceChanged`.
+
+### 8.2 Estrutura Proposta
+
+```csharp
+/// <summary>
+/// Display de recursos no Top HUD.
+/// Escuta GameEvents.OnResourceChanged e atualiza textos.
+/// </summary>
+public class ResourceDisplayUI : MonoBehaviour
+{
+    // ========== REFS ==========
+    [Header("Resource Texts")]
+    [SerializeField] private TMP_Text goldText;
+    [SerializeField] private TMP_Text woodText;
+    [SerializeField] private TMP_Text foodText;
+    
+    [Header("Icons (optional)")]
+    [SerializeField] private Image goldIcon;
+    [SerializeField] private Image woodIcon;
+    [SerializeField] private Image foodIcon;
+    
+    // ========== CACHE ==========
+    private int _goldAmount;
+    private int _woodAmount;
+    private int _foodAmount;
+    
+    // ========== MÉTODOS ==========
+    void OnEnable() { /* subscribe */ }
+    void OnDisable() { /* unsubscribe */ }
+    void Start() { /* sincronização inicial */ }
+    void OnResourceChanged(ResourceType type, int amount) { /* handler */ }
+    void UpdateDisplay(ResourceType type) { /* renderizar */ }
+}
+```
+
+### 8.3 Subscrição de Eventos
+
+```csharp
+void OnEnable()
+{
+    GameEvents.OnResourceChanged += OnResourceChanged;
+}
+
+void OnDisable()
+{
+    GameEvents.OnResourceChanged -= OnResourceChanged;
+}
+```
+
+### 8.4 Sincronização Inicial
+
+```csharp
+void Start()
+{
+    // Sincronizar com ResourceManager
+    if (ResourceManager.Instance != null)
+    {
+        _goldAmount = ResourceManager.Instance.Gold;
+        _woodAmount = ResourceManager.Instance.Wood;
+        _foodAmount = ResourceManager.Instance.Food;
+        
+        UpdateDisplay(ResourceType.Gold);
+        UpdateDisplay(ResourceType.Wood);
+        UpdateDisplay(ResourceType.Food);
+    }
+}
+```
+
+### 8.5 Handler de Evento
+
+```csharp
+/// <summary>
+/// Handler de GameEvents.OnResourceChanged.
+/// Cacheia valor e atualiza display.
+/// </summary>
+void OnResourceChanged(ResourceType type, int amount)
+{
+    switch (type)
+    {
+        case ResourceType.Gold:
+            _goldAmount = amount;
+            break;
+        case ResourceType.Wood:
+            _woodAmount = amount;
+            break;
+        case ResourceType.Food:
+            _foodAmount = amount;
+            break;
+    }
+    
+    UpdateDisplay(type);
+}
+```
+
+### 8.6 Renderização
+
+```csharp
+/// <summary>
+/// Atualiza texto do recurso específico.
+/// </summary>
+void UpdateDisplay(ResourceType type)
+{
+    switch (type)
+    {
+        case ResourceType.Gold:
+            if (goldText) goldText.text = _goldAmount.ToString();
+            break;
+        case ResourceType.Wood:
+            if (woodText) woodText.text = _woodAmount.ToString();
+            break;
+        case ResourceType.Food:
+            if (foodText) foodText.text = _foodAmount.ToString();
+            break;
+    }
+}
+```
+
+### 8.7 Setup no Inspector
+
+```
+TopHud (GameObject)
+└── Resource (GameObject)
+    ├── ResourceDisplayUI (MonoBehaviour)
+    │   ├── goldText: Gold (TMP_Text)
+    │   ├── woodText: Wood (TMP_Text)
+    │   ├── foodText: Food (TMP_Text)
+    │   ├── goldIcon: GoldIcon (Image) [opcional]
+    │   ├── woodIcon: WoodIcon (Image) [opcional]
+    │   └── foodIcon: FoodIcon (Image) [opcional]
+    │
+    ├── Gold (GameObject)
+    │   ├── Icon (Image) → Sprite de moeda
+    │   └── Text (TMP_Text) → "1000"
+    │
+    ├── Wood (GameObject)
+    │   ├── Icon (Image) → Sprite de madeira
+    │   └── Text (TMP_Text) → "500"
+    │
+    └── Food (GameObject)
+        ├── Icon (Image) → Sprite de comida
+        └── Text (TMP_Text) → "300"
+```
+
+### 8.8 Melhorias Futuras
+
+#### Formatação com Separador de Milhares
+
+```csharp
+void UpdateDisplay(ResourceType type)
+{
+    switch (type)
+    {
+        case ResourceType.Gold:
+            if (goldText) goldText.text = _goldAmount.ToString("N0"); // "1,234"
+            break;
+        // ... outras
+    }
+}
+```
+
+#### Animação de Mudança (Pulse)
+
+```csharp
+void UpdateDisplay(ResourceType type)
+{
+    TMP_Text text = GetTextForType(type);
+    if (text == null) return;
+    
+    text.text = GetAmountForType(type).ToString();
+    
+    // Animar (pulse)
+    text.transform.DOScale(1.2f, 0.1f).OnComplete(() => {
+        text.transform.DOScale(1f, 0.1f);
+    });
+}
+```
+
+#### Feedback de Ganho/Perda (Color Tween)
+
+```csharp
+void OnResourceChanged(ResourceType type, int amount)
+{
+    int oldAmount = GetCachedAmount(type);
+    int delta = amount - oldAmount;
+    
+    SetCachedAmount(type, amount);
+    UpdateDisplay(type);
+    
+    // Feedback visual
+    TMP_Text text = GetTextForType(type);
+    if (text != null)
+    {
+        Color color = delta > 0 ? Color.green : Color.red;
+        text.DOColor(color, 0.2f).OnComplete(() => {
+            text.DOColor(Color.white, 0.2f);
+        });
+    }
+}
+```
+
+---
+
+## 9) INTEGRAÇÃO COM GAMEEVENTS
+
+### 9.1 Diagrama de Fluxo Completo
+
+```
+[Fonte de Mudança de Recurso]
+    │
+    ├─→ BuildingConstructor.TryBuildBarracks()
+    │       ResourceManager.TrySpendResources({Gold: 200, Wood: 150})
+    │
+    ├─→ ResourceCollector.OnTreeHarvested()
+    │       ResourceManager.AddResource(Wood, 10)
+    │
+    └─→ Farm.ProduceFood() (passive income)
+            ResourceManager.AddResource(Food, 5)
+    │
+    ↓ (ResourceManager.SetResource)
+GameEvents.RaiseResourceChanged(type, amount)
+    │
+    ↓ (Event Bus)
+┌───────────────────────────────────────────┐
+│         GameEvents.OnResourceChanged       │
+└───────────────┬───────────────────────────┘
+                │
+    ┌───────────┼───────────┬────────────┐
+    ↓           ↓           ↓            ↓
+┌──────────┐ ┌──────┐ ┌─────────┐ ┌──────────┐
+│Resource  │ │Audio │ │Analytics│ │[Futuro]  │
+│DisplayUI │ │FX    │ │Tracker  │ │Tutorial  │
+└──────────┘ └──────┘ └─────────┘ └──────────┘
+    │
+    └─→ UpdateDisplay(type)
+            goldText.text = "1500"
+```
+
+### 9.2 Exemplo Completo de Integração
+
+**1. Jogador clica em "Build Barracks":**
+
+```csharp
+// BuildingConstructor.cs
+public void OnBarracksButtonClicked()
+{
+    var cost = new Dictionary<ResourceType, int>
+    {
+        { ResourceType.Gold, 200 },
+        { ResourceType.Wood, 150 }
+    };
+    
+    if (ResourceManager.Instance.TrySpendResources(cost))
+    {
+        // Sucesso: construir
+        ConstructBuilding(BuildingType.Barracks);
+    }
+    else
+    {
+        // Falha: feedback
+        ShowInsufficientResourcesUI();
+    }
+}
+```
+
+**2. ResourceManager gasta recursos:**
+
+```csharp
+// ResourceManager.cs
+public bool TrySpendResources(Dictionary<ResourceType, int> cost)
+{
+    if (!HasResources(cost)) return false;
+    
+    // Gold: 1000 → 800
+    SetResource(ResourceType.Gold, 800);
+    // → GameEvents.RaiseResourceChanged(Gold, 800)
+    
+    // Wood: 500 → 350
+    SetResource(ResourceType.Wood, 350);
+    // → GameEvents.RaiseResourceChanged(Wood, 350)
+    
+    return true;
+}
+```
+
+**3. ResourceDisplayUI escuta evento:**
+
+```csharp
+// ResourceDisplayUI.cs
+void OnResourceChanged(ResourceType type, int amount)
+{
+    switch (type)
+    {
+        case ResourceType.Gold:
+            _goldAmount = amount; // 800
+            goldText.text = "800"; // Atualiza UI
+            break;
+        case ResourceType.Wood:
+            _woodAmount = amount; // 350
+            woodText.text = "350";
+            break;
+    }
+}
+```
+
+**4. Outros sistemas também reagem:**
+
+```csharp
+// AudioManager.cs (opcional)
+void OnResourceChanged(ResourceType type, int amount)
+{
+    // Tocar som de moedas/madeira
+    PlayResourceSound(type);
+}
+
+// AnalyticsTracker.cs (opcional)
+void OnResourceChanged(ResourceType type, int amount)
+{
+    // Enviar para analytics
+    TrackResourceChange(type, amount);
+}
+```
+
+---
+
+# PARTE IV: TOP HUD (RANKING & CHAT - ARQUITETURA FUTURA)
+
+---
+
+## 10) RANKINGSYSTEM - SISTEMA DE RANKING
+
+### 10.1 Visão Geral
+
+**Tipo:** `MonoBehaviour` (Singleton)  
+**Arquivo:** `RankingSystem.cs` (a ser implementado)  
+**Responsabilidade:** Gerencia ranking de jogadores/facções. Calcula pontuação baseada em métricas (unidades, construções, recursos).
+
+### 10.2 Estrutura Proposta
+
+```csharp
+/// <summary>
+/// Sistema de ranking multiplayer/singleplayer.
+/// Calcula pontuação e dispara eventos de mudança.
+/// </summary>
+public class RankingSystem : MonoBehaviour
+{
+    // ========== SINGLETON ==========
+    public static RankingSystem Instance { get; private set; }
+    
+    // ========== CONFIGURAÇÃO ==========
+    [Header("Score Weights")]
+    [SerializeField] private int pointsPerUnit = 10;
+    [SerializeField] private int pointsPerBuilding = 50;
+    [SerializeField] private int pointsPerResource = 1;
+    
+    // ========== ESTADO ==========
+    private List<RankEntry> _rankings = new();
+    
+    // ========== MÉTODOS ==========
+    void Awake() { /* singleton */ }
+    void Start() { /* inicializar */ }
+    public void UpdateRanking() { /* recalcular */ }
+    int CalculateScore(FactionId faction) { /* cálculo */ }
+}
+
+/// <summary>
+/// Entrada de ranking (jogador/facção).
+/// </summary>
+[System.Serializable]
+public class RankEntry
+{
+    public FactionId faction;
+    public string playerName;
+    public int score;
+    public int rank; // 1st, 2nd, 3rd...
+}
+```
+
+### 10.3 Cálculo de Pontuação
+
+```csharp
+/// <summary>
+/// Calcula pontuação de uma facção.
+/// Score = (Units * 10) + (Buildings * 50) + (Resources / 100)
+/// </summary>
+int CalculateScore(FactionId faction)
+{
+    int score = 0;
+    
+    // Unidades
+    var units = UnitRegistry.GetByFaction(faction);
+    score += units.Count * pointsPerUnit;
+    
+    // Construções (exemplo - requer BuildingRegistry)
+    // var buildings = BuildingRegistry.GetByFaction(faction);
+    // score += buildings.Count * pointsPerBuilding;
+    
+    // Recursos (se aplicável)
+    if (faction == PlayerController.Instance.myFaction)
+    {
+        int totalResources = ResourceManager.Instance.Gold +
+                             ResourceManager.Instance.Wood +
+                             ResourceManager.Instance.Food;
+        score += totalResources / 100; // Dividir para não dominar score
+    }
+    
+    return score;
+}
+```
+
+### 10.4 Atualização de Ranking
+
+```csharp
+/// <summary>
+/// Recalcula ranking de todas as facções.
+/// Dispara GameEvents.OnRankingUpdated.
+/// </summary>
+public void UpdateRanking()
+{
+    _rankings.Clear();
+    
+    // Para cada facção ativa
+    foreach (var faction in FactionManager.GetActiveFactions())
+    {
+        var entry = new RankEntry
+        {
+            faction = faction.id,
+            playerName = faction.playerName,
+            score = CalculateScore(faction.id)
+        };
+        _rankings.Add(entry);
+    }
+    
+    // Ordenar por pontuação (maior primeiro)
+    _rankings.Sort((a, b) => b.score.CompareTo(a.score));
+    
+    // Atribuir ranks
+    for (int i = 0; i < _rankings.Count; i++)
+    {
+        _rankings[i].rank = i + 1;
+    }
+    
+    // Disparar evento
+    GameEvents.RaiseRankingUpdated(_rankings);
+}
+```
+
+### 10.5 Update Periódico
+
+```csharp
+[Header("Update Settings")]
+[SerializeField] private float updateInterval = 10f; // Segundos
+private float _timer;
+
+void Update()
+{
+    _timer += Time.deltaTime;
+    if (_timer >= updateInterval)
+    {
+        _timer = 0f;
+        UpdateRanking();
+    }
+}
+```
+
+### 10.6 Integração com GameEvents
+
+```csharp
+// GameEvents.cs (adicionar)
+public static class GameEvents
+{
+    // ========== EVENTOS DE RANKING ==========
+    public static event System.Action<List<RankEntry>> OnRankingUpdated;
+    
+    // ========== MÉTODOS DE DISPARO ==========
+    public static void RaiseRankingUpdated(List<RankEntry> rankings)
+    {
+        OnRankingUpdated?.Invoke(rankings);
+    }
+}
+```
+
+---
+
+## 11) CHATSYSTEM - SISTEMA DE CHAT
+
+### 11.1 Visão Geral
+
+**Tipo:** `MonoBehaviour` (Singleton)  
+**Arquivo:** `ChatSystem.cs` (a ser implementado)  
+**Responsabilidade:** Gerencia mensagens de chat multiplayer. Envia/recebe via rede (Mirror, Netcode, etc).
+
+### 11.2 Estrutura Proposta
+
+```csharp
+/// <summary>
+/// Sistema de chat multiplayer.
+/// Envia/recebe mensagens e dispara eventos.
+/// </summary>
+public class ChatSystem : MonoBehaviour
+{
+    // ========== SINGLETON ==========
+    public static ChatSystem Instance { get; private set; }
+    
+    // ========== CONFIGURAÇÃO ==========
+    [Header("Settings")]
+    [SerializeField] private int maxMessages = 100;
+    
+    // ========== ESTADO ==========
+    private List<ChatMessage> _messages = new();
+    
+    // ========== MÉTODOS ==========
+    void Awake() { /* singleton */ }
+    public void SendMessage(string text) { /* enviar */ }
+    public void ReceiveMessage(ChatMessage msg) { /* receber */ }
+}
+
+/// <summary>
+/// Mensagem de chat.
+/// </summary>
+[System.Serializable]
+public class ChatMessage
+{
+    public string senderName;
+    public FactionId senderFaction;
+    public string text;
+    public float timestamp;
+    
+    public ChatMessage(string sender, FactionId faction, string message)
+    {
+        senderName = sender;
+        senderFaction = faction;
+        text = message;
+        timestamp = Time.time;
+    }
+}
+```
+
+### 11.3 Enviar Mensagem
+
+```csharp
+/// <summary>
+/// Envia mensagem de chat.
+/// TODO: Integrar com sistema de rede (Mirror/Netcode).
+/// </summary>
+public void SendMessage(string text)
+{
+    if (string.IsNullOrWhiteSpace(text)) return;
+    
+    var msg = new ChatMessage(
+        PlayerController.Instance.playerName,
+        PlayerController.Instance.myFaction,
+        text
+    );
+    
+    // TODO: Enviar via rede
+    // NetworkServer.SendToAll(msg);
+    
+    // Por enquanto: apenas adicionar localmente
+    ReceiveMessage(msg);
+}
+```
+
+### 11.4 Receber Mensagem
+
+```csharp
+/// <summary>
+/// Recebe mensagem de chat (local ou remota).
+/// Dispara GameEvents.OnChatMessageReceived.
+/// </summary>
+public void ReceiveMessage(ChatMessage msg)
+{
+    _messages.Add(msg);
+    
+    // Limitar histórico
+    if (_messages.Count > maxMessages)
+    {
+        _messages.RemoveAt(0);
+    }
+    
+    // Disparar evento
+    GameEvents.RaiseChatMessageReceived(msg);
+}
+```
+
+### 11.5 Integração com GameEvents
+
+```csharp
+// GameEvents.cs (adicionar)
+public static class GameEvents
+{
+    // ========== EVENTOS DE CHAT ==========
+    public static event System.Action<ChatMessage> OnChatMessageReceived;
+    
+    // ========== MÉTODOS DE DISPARO ==========
+    public static void RaiseChatMessageReceived(ChatMessage message)
+    {
+        OnChatMessageReceived?.Invoke(message);
+    }
+}
+```
+
+---
+
+## 12) UI MODULAR (RANKING/CHAT)
+
+### 12.1 RankingUI (Painel de Ranking)
+
+```csharp
+/// <summary>
+/// Painel de ranking (toggle ao clicar botão "Ranking").
+/// Exibe lista de jogadores ordenados por pontuação.
+/// </summary>
+public class RankingUI : MonoBehaviour
+{
+    [Header("Refs")]
+    [SerializeField] private GameObject panelRoot;
+    [SerializeField] private Transform entryContainer;
+    [SerializeField] private RankEntryUI entryPrefab;
+    
+    private List<RankEntryUI> _entries = new();
+    
+    void OnEnable()
+    {
+        GameEvents.OnRankingUpdated += OnRankingUpdated;
+    }
+    
+    void OnDisable()
+    {
+        GameEvents.OnRankingUpdated -= OnRankingUpdated;
+    }
+    
+    void OnRankingUpdated(List<RankEntry> rankings)
+    {
+        // Limpar entries antigas
+        foreach (var entry in _entries)
+        {
+            Destroy(entry.gameObject);
+        }
+        _entries.Clear();
+        
+        // Criar novas entries
+        foreach (var rank in rankings)
+        {
+            var entryUI = Instantiate(entryPrefab, entryContainer);
+            entryUI.SetData(rank);
+            _entries.Add(entryUI);
+        }
+    }
+    
+    public void TogglePanel()
+    {
+        panelRoot.SetActive(!panelRoot.activeSelf);
+    }
+}
+
+/// <summary>
+/// UI de uma entrada de ranking.
+/// </summary>
+public class RankEntryUI : MonoBehaviour
+{
+    [SerializeField] private TMP_Text rankText;   // "#1"
+    [SerializeField] private TMP_Text nameText;   // "Player1"
+    [SerializeField] private TMP_Text scoreText;  // "1234"
+    [SerializeField] private Image factionIcon;   // Brasão da facção
+    
+    public void SetData(RankEntry entry)
+    {
+        rankText.text = $"#{entry.rank}";
+        nameText.text = entry.playerName;
+        scoreText.text = entry.score.ToString();
+        
+        // Ícone de facção
+        var factionDef = FactionDatabase.Instance.Get(entry.faction);
+        if (factionDef != null && factionIcon != null)
+        {
+            factionIcon.sprite = factionDef.icon;
+            factionIcon.color = factionDef.color;
+        }
+    }
+}
+```
+
+### 12.2 ChatUI (Painel de Chat)
+
+```csharp
+/// <summary>
+/// Painel de chat (toggle ao clicar botão "Chat").
+/// Exibe histórico de mensagens e input field.
+/// </summary>
+public class ChatUI : MonoBehaviour
+{
+    [Header("Refs")]
+    [SerializeField] private GameObject panelRoot;
+    [SerializeField] private ScrollRect scrollRect;
+    [SerializeField] private Transform messageContainer;
+    [SerializeField] private ChatMessageUI messagePrefab;
+    [SerializeField] private TMP_InputField inputField;
+    [SerializeField] private Button sendButton;
+    
+    private List<ChatMessageUI> _messages = new();
+    
+    void OnEnable()
+    {
+        GameEvents.OnChatMessageReceived += OnMessageReceived;
+    }
+    
+    void OnDisable()
+    {
+        GameEvents.OnChatMessageReceived -= OnMessageReceived;
+    }
+    
+    void Start()
+    {
+        sendButton.onClick.AddListener(OnSendClicked);
+        inputField.onSubmit.AddListener(OnInputSubmit);
+    }
+    
+    void OnMessageReceived(ChatMessage msg)
+    {
+        var msgUI = Instantiate(messagePrefab, messageContainer);
+        msgUI.SetData(msg);
+        _messages.Add(msgUI);
+        
+        // Scroll para o final
+        Canvas.ForceUpdateCanvases();
+        scrollRect.verticalNormalizedPosition = 0f;
+    }
+    
+    void OnSendClicked()
+    {
+        SendMessage();
+    }
+    
+    void OnInputSubmit(string text)
+    {
+        SendMessage();
+    }
+    
+    void SendMessage()
+    {
+        string text = inputField.text.Trim();
+        if (string.IsNullOrEmpty(text)) return;
+        
+        ChatSystem.Instance.SendMessage(text);
+        inputField.text = "";
+        inputField.ActivateInputField();
+    }
+    
+    public void TogglePanel()
+    {
+        panelRoot.SetActive(!panelRoot.activeSelf);
+        if (panelRoot.activeSelf)
+        {
+            inputField.ActivateInputField();
+        }
+    }
+}
+
+/// <summary>
+/// UI de uma mensagem de chat.
+/// </summary>
+public class ChatMessageUI : MonoBehaviour
+{
+    [SerializeField] private TMP_Text messageText;
+    
+    public void SetData(ChatMessage msg)
+    {
+        // Formato: "[Player1]: Hello!"
+        messageText.text = $"[{msg.senderName}]: {msg.text}";
+        
+        // Colorir por facção
+        var factionDef = FactionDatabase.Instance.Get(msg.senderFaction);
+        if (factionDef != null)
+        {
+            messageText.color = factionDef.color;
+        }
+    }
+}
+```
+
+---
+
+# PARTE V: BUTTON HUD (COMANDOS - ARQUITETURA FUTURA)
+
+---
+
+## 13) COMMANDCONTROLLER - CONTROLADOR DE COMANDOS
+
+### 13.1 Visão Geral
+
+**Tipo:** `MonoBehaviour`  
+**Arquivo:** `CommandController.cs` (a ser implementado)  
+**Responsabilidade:** Centraliza comandos enviados para unidades selecionadas (Move, Attack, Defend, Hold, Patrol).
+
+### 13.2 Arquitetura (Command Pattern)
+
+```
+┌──────────────────────────────────────────────────┐
+│            CommandController (Invoker)            │
+│  ┌────────────────────────────────────────┐      │
+│  │ ExecuteCommand(ICommand command)       │      │
+│  └────────────────────────────────────────┘      │
+└────────────────────┬─────────────────────────────┘
+                     │
+        ┌────────────┼────────────┬────────────┐
+        ↓            ↓            ↓            ↓
+┌─────────────┐ ┌─────────┐ ┌─────────┐ ┌──────────┐
+│ MoveCommand │ │ Attack  │ │ Defend  │ │ Patrol   │
+│             │ │ Command │ │ Command │ │ Command  │
+│ Execute()   │ │Execute()│ │Execute()│ │Execute() │
+└─────────────┘ └─────────┘ └─────────┘ └──────────┘
+        │            │            │            │
+        └────────────┴────────────┴────────────┘
+                     │
+                     ↓
+            ┌─────────────────┐
+            │ Unit.ReceiveCmd │
+            └─────────────────┘
+```
+
+### 13.3 Interface ICommand
+
+```csharp
+/// <summary>
+/// Interface base para comandos.
+/// Implementa o Command Pattern.
+/// </summary>
+public interface ICommand
+{
+    void Execute(List<Unit> units);
+}
+```
+
+### 13.4 Estrutura do CommandController
+
+```csharp
+/// <summary>
+/// Controlador centralizado de comandos.
+/// Recebe input de botões/hotkeys e executa comandos nas unidades selecionadas.
+/// </summary>
+public class CommandController : MonoBehaviour
+{
+    // ========== REFS ==========
+    [Header("Refs")]
+    [SerializeField] private SelectionManager selectionManager;
+    [SerializeField] private InputSelection inputSelection;
+    
+    // ========== COMMANDS ==========
+    private MoveCommand _moveCommand;
+    private AttackCommand _attackCommand;
+    private DefendCommand _defendCommand;
+    private HoldCommand _holdCommand;
+    
+    // ========== MÉTODOS ==========
+    void Awake() { /* inicializar comandos */ }
+    public void ExecuteCommand(ICommand command) { /* executar */ }
+    public void OrderMove(Vector3 targetPosition) { /* mover */ }
+    public void OrderAttack(Unit targetUnit) { /* atacar */ }
+    public void OrderDefend() { /* defender */ }
+    public void OrderHold() { /* parar */ }
+}
+```
+
+### 13.5 Inicialização de Comandos
+
+```csharp
+void Awake()
+{
+    // Instanciar comandos (reusáveis)
+    _moveCommand = new MoveCommand();
+    _attackCommand = new AttackCommand();
+    _defendCommand = new DefendCommand();
+    _holdCommand = new HoldCommand();
+}
+```
+
+### 13.6 Execução de Comando
+
+```csharp
+/// <summary>
+/// Executa comando nas unidades selecionadas.
+/// </summary>
+public void ExecuteCommand(ICommand command)
+{
+    if (selectionManager == null || command == null) return;
+    
+    var selected = selectionManager.Selection.ToList();
+    if (selected.Count == 0)
+    {
+        Debug.Log("No units selected");
+        return;
+    }
+    
+    command.Execute(selected);
+}
+```
+
+### 13.7 Comandos Específicos
+
+#### Move Command
+
+```csharp
+/// <summary>
+/// Comando de movimento.
+/// </summary>
+public class MoveCommand : ICommand
+{
+    public Vector3 TargetPosition { get; set; }
+    
+    public void Execute(List<Unit> units)
+    {
+        foreach (var unit in units)
+        {
+            if (unit == null) continue;
+            
+            // Delegar para componente de movimento
+            var movement = unit.GetComponent<UnitMovement>();
+            if (movement != null)
+            {
+                movement.MoveTo(TargetPosition);
+            }
+        }
+    }
+}
+
+// Uso no CommandController
+public void OrderMove(Vector3 targetPosition)
+{
+    _moveCommand.TargetPosition = targetPosition;
+    ExecuteCommand(_moveCommand);
+}
+```
+
+#### Attack Command
+
+```csharp
+/// <summary>
+/// Comando de ataque.
+/// </summary>
+public class AttackCommand : ICommand
+{
+    public Unit TargetUnit { get; set; }
+    
+    public void Execute(List<Unit> units)
+    {
+        foreach (var unit in units)
+        {
+            if (unit == null) continue;
+            
+            var combat = unit.GetComponent<UnitCombat>();
+            if (combat != null)
+            {
+                combat.AttackTarget(TargetUnit);
+            }
+        }
+    }
+}
+
+// Uso
+public void OrderAttack(Unit targetUnit)
+{
+    _attackCommand.TargetUnit = targetUnit;
+    ExecuteCommand(_attackCommand);
+}
+```
+
+#### Defend Command
+
+```csharp
+/// <summary>
+/// Comando de defesa (stance defensivo).
+/// </summary>
+public class DefendCommand : ICommand
+{
+    public void Execute(List<Unit> units)
+    {
+        foreach (var unit in units)
+        {
+            if (unit == null) continue;
+            
+            var combat = unit.GetComponent<UnitCombat>();
+            if (combat != null)
+            {
+                combat.SetStance(CombatStance.Defensive);
+            }
+        }
+    }
+}
+```
+
+#### Hold Command
+
+```csharp
+/// <summary>
+/// Comando de parar (cancela ações atuais).
+/// </summary>
+public class HoldCommand : ICommand
+{
+    public void Execute(List<Unit> units)
+    {
+        foreach (var unit in units)
+        {
+            if (unit == null) continue;
+            
+            // Cancelar movimento
+            var movement = unit.GetComponent<UnitMovement>();
+            movement?.Stop();
+            
+            // Cancelar ataque
+            var combat = unit.GetComponent<UnitCombat>();
+            combat?.StopAttack();
+        }
+    }
+}
+```
+
+### 13.8 Integração com Input
+
+```csharp
+void Update()
+{
+    // Right-click no mundo: mover
+    if (Input.GetMouseButtonDown(1))
+    {
+        if (TryGetWorldPosition(out Vector3 worldPos))
+        {
+            OrderMove(worldPos);
+        }
+    }
+    
+    // Hotkeys
+    if (Input.GetKeyDown(KeyCode.S)) // Stop
+    {
+        OrderHold();
+    }
+    
+    if (Input.GetKeyDown(KeyCode.D)) // Defend
+    {
+        OrderDefend();
+    }
+}
+
+bool TryGetWorldPosition(out Vector3 worldPos)
+{
+    worldPos = default;
+    
+    Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
+    if (Physics.Raycast(ray, out RaycastHit hit))
+    {
+        worldPos = hit.point;
+        return true;
+    }
+    return false;
+}
+```
+
+---
+
+## 14) UNITACTIONBUTTONS - BOTÕES DE AÇÃO
+
+### 14.1 Visão Geral
+
+**Tipo:** `MonoBehaviour`  
+**Arquivo:** `UnitActionButtons.cs` (a ser implementado)  
+**Responsabilidade:** Gerencia botões de ação no Bottom HUD. Atualiza visuais baseado em seleção.
+
+### 14.2 Estrutura Proposta
+
+```csharp
+/// <summary>
+/// Gerencia botões de ação de unidades.
+/// Atualiza visuais baseado em unidades selecionadas.
+/// </summary>
+public class UnitActionButtons : MonoBehaviour
+{
+    // ========== REFS ==========
+    [Header("Command Buttons")]
+    [SerializeField] private Button moveButton;
+    [SerializeField] private Button attackButton;
+    [SerializeField] private Button defendButton;
+    [SerializeField] private Button holdButton;
+    [SerializeField] private Button patrolButton;
+    
+    [Header("Refs")]
+    [SerializeField] private SelectionManager selectionManager;
+    [SerializeField] private CommandController commandController;
+    
+    // ========== MÉTODOS ==========
+    void OnEnable() { /* subscribe */ }
+    void OnDisable() { /* unsubscribe */ }
+    void Start() { /* ligar botões */ }
+    void OnSelectionChanged(IReadOnlyCollection<Unit> selection) { /* atualizar */ }
+    void UpdateButtons(IReadOnlyCollection<Unit> selection) { /* visuais */ }
+}
+```
+
+### 14.3 Subscrição de Eventos
+
+```csharp
+void OnEnable()
+{
+    GameEvents.OnSelectionChanged += OnSelectionChanged;
+}
+
+void OnDisable()
+{
+    GameEvents.OnSelectionChanged -= OnSelectionChanged;
+}
+```
+
+### 14.4 Ligação de Botões
+
+```csharp
+void Start()
+{
+    if (moveButton)
+        moveButton.onClick.AddListener(OnMoveButtonClicked);
+    
+    if (attackButton)
+        attackButton.onClick.AddListener(OnAttackButtonClicked);
+    
+    if (defendButton)
+        defendButton.onClick.AddListener(() => commandController.OrderDefend());
+    
+    if (holdButton)
+        holdButton.onClick.AddListener(() => commandController.OrderHold());
+}
+
+void OnMoveButtonClicked()
+{
+    // Ativar modo "click para mover"
+    // (implementação depende de sistema de input)
+}
+
+void OnAttackButtonClicked()
+{
+    // Ativar modo "click para atacar"
+}
+```
+
+### 14.5 Atualização Baseada em Seleção
+
+```csharp
+/// <summary>
+/// Atualiza botões baseado em unidades selecionadas.
+/// Habilita/desabilita botões conforme capabilities.
+/// </summary>
+void UpdateButtons(IReadOnlyCollection<Unit> selection)
+{
+    if (selection == null || selection.Count == 0)
+    {
+        // Nenhuma unidade selecionada: desabilitar todos
+        SetButtonsInteractable(false);
+        return;
+    }
+    
+    // Verificar capabilities (exemplo: se alguma unidade pode atacar)
+    bool canMove = selection.Any(u => u.GetComponent<UnitMovement>() != null);
+    bool canAttack = selection.Any(u => u.GetComponent<UnitCombat>() != null);
+    
+    // Atualizar interatividade
+    if (moveButton) moveButton.interactable = canMove;
+    if (attackButton) attackButton.interactable = canAttack;
+    if (defendButton) defendButton.interactable = canAttack;
+    if (holdButton) holdButton.interactable = true; // Sempre disponível
+}
+
+void SetButtonsInteractable(bool interactable)
+{
+    if (moveButton) moveButton.interactable = interactable;
+    if (attackButton) attackButton.interactable = interactable;
+    if (defendButton) defendButton.interactable = interactable;
+    if (holdButton) holdButton.interactable = interactable;
+    if (patrolButton) patrolButton.interactable = interactable;
+}
+```
+
+---
+
+## 15) GROUPHOTKEYMANAGER - ATALHOS CTRL+1~9
+
+### 15.1 Visão Geral
+
+**Tipo:** `MonoBehaviour`  
+**Arquivo:** `GroupHotkeyManager.cs` (a ser implementado)  
+**Responsabilidade:** Gerencia atalhos de grupo (Ctrl+1~9 para criar, 1~9 para selecionar).
+
+### 15.2 Estrutura Proposta
+
+```csharp
+/// <summary>
+/// Gerencia hotkeys de grupo (Ctrl+1~9 para criar, 1~9 para selecionar).
+/// Integra com UnitListPanel (grupos criados lá aparecem aqui).
+/// </summary>
+public class GroupHotkeyManager : MonoBehaviour
+{
+    // ========== REFS ==========
+    [Header("Refs")]
+    [SerializeField] private SelectionManager selectionManager;
+    [SerializeField] private UnitListPanel unitListPanel;
+    
+    // ========== GRUPOS ==========
+    private Dictionary<int, UnitGroup> _hotkeyGroups = new(); // Key: 1-9
+    
+    // ========== MÉTODOS ==========
+    void OnEnable() { /* subscribe */ }
+    void OnDisable() { /* unsubscribe */ }
+    void Update() { /* input */ }
+    void OnGroupCreated(UnitGroup group) { /* handler */ }
+    void AssignGroupToHotkey(int key, UnitGroup group) { /* atribuir */ }
+    void SelectGroup(int key) { /* selecionar */ }
+}
+```
+
+### 15.3 Subscrição de Eventos
+
+```csharp
+void OnEnable()
+{
+    GameEvents.OnGroupCreated += OnGroupCreated;
+    GameEvents.OnGroupDeleted += OnGroupDeleted;
+}
+
+void OnDisable()
+{
+    GameEvents.OnGroupCreated -= OnGroupCreated;
+    GameEvents.OnGroupDeleted -= OnGroupDeleted;
+}
+```
+
+### 15.4 Handler de Criação de Grupo
+
+```csharp
+/// <summary>
+/// Handler de GameEvents.OnGroupCreated.
+/// Atribui grupo ao próximo slot de hotkey disponível.
+/// </summary>
+void OnGroupCreated(UnitGroup group)
+{
+    // Encontrar slot vazio (1-9)
+    for (int i = 1; i <= 9; i++)
+    {
+        if (!_hotkeyGroups.ContainsKey(i))
+        {
+            AssignGroupToHotkey(i, group);
+            Debug.Log($"Group '{group.GroupName}' assigned to hotkey {i}");
+            return;
+        }
+    }
+    
+    Debug.LogWarning("All hotkey slots (1-9) are full!");
+}
+
+void OnGroupDeleted(UnitGroup group)
+{
+    // Remover grupo dos hotkeys
+    var key = _hotkeyGroups.FirstOrDefault(x => x.Value == group).Key;
+    if (key != 0)
+    {
+        _hotkeyGroups.Remove(key);
+        Debug.Log($"Group removed from hotkey {key}");
+    }
+}
+```
+
+### 15.5 Input de Hotkeys
+
+```csharp
+void Update()
+{
+    // Ctrl+1~9: Atribuir seleção atual ao hotkey
+    if (Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl))
+    {
+        for (int i = 1; i <= 9; i++)
+        {
+            if (Input.GetKeyDown(KeyCode.Alpha0 + i))
+            {
+                AssignSelectionToHotkey(i);
+                return;
+            }
+        }
+    }
+    // 1~9: Selecionar grupo
+    else
+    {
+        for (int i = 1; i <= 9; i++)
+        {
+            if (Input.GetKeyDown(KeyCode.Alpha0 + i))
+            {
+                SelectGroup(i);
+                return;
+            }
+        }
+    }
+    
+    // Duplo clique no número: centralizar câmera no grupo
+    // (implementação depende de detecção de double-click)
+}
+```
+
+### 15.6 Atribuir Seleção a Hotkey
+
+```csharp
+/// <summary>
+/// Ctrl+N: Atribui seleção atual ao hotkey N.
+/// Cria grupo se necessário.
+/// </summary>
+void AssignSelectionToHotkey(int key)
+{
+    if (selectionManager == null) return;
+    
+    var selected = selectionManager.Selection.ToList();
+    if (selected.Count == 0)
+    {
+        Debug.Log("No units selected");
+        return;
+    }
+    
+    // Verificar se já existe grupo neste hotkey
+    if (_hotkeyGroups.TryGetValue(key, out UnitGroup existingGroup))
+    {
+        // Atualizar grupo existente
+        existingGroup.Units.Clear();
+        existingGroup.Units.AddRange(selected);
+        Debug.Log($"Group hotkey {key} updated with {selected.Count} units");
+    }
+    else
+    {
+        // Criar novo grupo
+        var newGroup = new UnitGroup
+        {
+            GroupName = $"Group {key}",
+            Units = selected
+        };
+        
+        _hotkeyGroups[key] = newGroup;
+        
+        // Disparar evento (opcional: adicionar à lista)
+        GameEvents.RaiseGroupCreated(newGroup);
+        
+        Debug.Log($"Group hotkey {key} created with {selected.Count} units");
+    }
+}
+```
+
+### 15.7 Selecionar Grupo por Hotkey
+
+```csharp
+/// <summary>
+/// N: Seleciona grupo atribuído ao hotkey N.
+/// </summary>
+void SelectGroup(int key)
+{
+    if (!_hotkeyGroups.TryGetValue(key, out UnitGroup group))
+    {
+        Debug.Log($"No group assigned to hotkey {key}");
+        return;
+    }
+    
+    // Filtrar unidades que ainda existem
+    var validUnits = group.Units.Where(u => u != null).ToList();
+    
+    if (validUnits.Count == 0)
+    {
+        Debug.Log($"Group hotkey {key} has no valid units");
+        return;
+    }
+    
+    // Selecionar unidades
+    selectionManager.SelectExactly(validUnits);
+    
+    Debug.Log($"Selected {validUnits.Count} units from group hotkey {key}");
+}
+```
+
+---
+
+## 16) INTEGRAÇÃO COM SELECTIONMANAGER
+
+### 16.1 Diagrama de Fluxo
+
+```
+[Usuário Pressiona Ctrl+2]
+    │
+    ↓
+GroupHotkeyManager.AssignSelectionToHotkey(2)
+    │
+    ├─→ Obter unidades selecionadas (SelectionManager.Selection)
+    │
+    ├─→ Criar/Atualizar UnitGroup
+    │
+    ├─→ Armazenar em _hotkeyGroups[2]
+    │
+    └─→ GameEvents.RaiseGroupCreated(group)
+            │
+            ↓
+        [UnitListPanel.HandleGroupCreated]
+            │
+            └─→ Adiciona grupo à lista visual
+
+---
+
+[Usuário Pressiona 2]
+    │
+    ↓
+GroupHotkeyManager.SelectGroup(2)
+    │
+    ├─→ Obter grupo de _hotkeyGroups[2]
+    │
+    ├─→ Filtrar unidades válidas
+    │
+    └─→ SelectionManager.SelectExactly(units)
+            │
+            ↓
+        GameEvents.RaiseSelectionChanged(selection)
+            │
+            ↓
+        [UnitListPanel.RefreshFromSelection]
+        [UnitActionButtons.UpdateButtons]
+        [Outros sistemas...]
+```
+
+### 16.2 Sincronização Bidirecional
+
+**1. Grupo criado no Left Bar → Aparece em Hotkey:**
+
+```csharp
+// UnitListPanel.CreateNewGroup()
+public void CreateNewGroup(string groupName)
+{
+    // ... criar grupo ...
+    
+    GameEvents.RaiseGroupCreated(newGroup);
+    // → GroupHotkeyManager.OnGroupCreated(newGroup)
+    //   → Atribui ao próximo slot livre (1-9)
+}
+```
+
+**2. Hotkey criado → Aparece no Left Bar:**
+
+```csharp
+// GroupHotkeyManager.AssignSelectionToHotkey()
+void AssignSelectionToHotkey(int key)
+{
+    // ... criar grupo ...
+    
+    GameEvents.RaiseGroupCreated(newGroup);
+    // → UnitListPanel.HandleGroupCreated(newGroup) (se implementado)
+    //   → Adiciona à lista visual
+}
+```
+
+---
+
+# PARTE VI: MINIMAPA
+
+---
+
+## 17) MINIMAPCONTROLLER - CONTROLADOR PRINCIPAL
+
+### 17.1 Visão Geral
+
+**Tipo:** `MonoBehaviour`  
+**Arquivo:** `MinimapController.cs`  
+**Implementa:** `IPointerClickHandler`, `IScrollHandler`  
+**Responsabilidade:** Controlador completo do minimapa. Gerencia:
+- Ícones de unidades (pooling)
+- Zoom independente
+- Click-to-move (Go To)
+- Sincronização com câmera principal
+- Culling e fade de ícones
+
+### 17.2 Estrutura da Classe
+
+```csharp
+/// <summary>
+/// Controlador completo do minimapa.
+/// REFATORADO: Usa GameEvents.OnUnitSpawned/OnUnitDespawned.
+/// </summary>
+public class MinimapController : MonoBehaviour, IPointerClickHandler, IScrollHandler
+{
+    // ========== REFS ==========
+    [Header("Refs")]
+    public RawImage minimapImage;                 // RawImage do minimapa
+    public RectTransform iconsRoot;               // Container de ícones
+    public RectTransform iconPrefab;              // Prefab de ícone
+    public Camera minimapCamera;                  // Câmera ortográfica do minimapa
+    public RTSCameraCinemachineV3Controller rtsCamera; // Câmera principal
+    public FactionDatabase factionDb;             // Para cores de facção
+    
+    // ========== MAPA ==========
+    [Header("Mapa (bounds)")]
+    public Vector2 boundsCenter = Vector2.zero;   // Centro do mapa (x,z)
+    public Vector2 boundsSize = new Vector2(200, 200); // Tamanho do mapa
+    
+    // ========== APARÊNCIA ==========
+    [Header("Aparência")]
+    public Vector2 iconSize = new Vector2(8, 8);
+    public bool clampIconsInside = true;
+    
+    // ========== FOLLOW MAIN VIEW ==========
+    [Header("Follow Main View")]
+    public bool followMainView = true;
+    public Camera mainCamera;                     // Main Camera (com Brain)
+    public LayerMask groundMask = ~0;             // Camadas de chão
+    public float groundY = 0f;                    // Altura do plano
+    public float viewPadding = 1.2f;              // Padding de visão (120%)
+    
+    // ========== CULLING ==========
+    [Header("Culling de Ícones")]
+    public bool hideIconsOutside = true;
+    [Range(0f, 0.1f)] public float uvBorderTolerance = 0.0f;
+    public bool fadeNearBorder = false;
+    public float fadeWidthUV = 0.03f;
+    
+    // ========== ZOOM ==========
+    [Header("Minimap Zoom")]
+    public float baseWorldHeight = 150f;          // Altura base (world units)
+    public float minZoom = 0.5f;                  // Zoom mínimo
+    public float maxZoom = 3.0f;                  // Zoom máximo
+    public float zoom = 1.0f;                     // Zoom atual
+    public float zoomStepButtons = 0.15f;         // Step dos botões +/-
+    public float zoomScrollSensitivity = 0.2f;    // Sensibilidade do scroll
+    
+    // ========== POOLING ==========
+    readonly Dictionary<Unit, RectTransform> _icons = new();
+    readonly Stack<RectTransform> _pool = new();
+    
+    // ========== MÉTODOS ==========
+    void OnEnable() { /* subscribe */ }
+    void OnDisable() { /* unsubscribe */ }
+    void Update() { /* atualizar */ }
+    void HandleSpawn(Unit u) { /* criar ícone */ }
+    void HandleDespawn(Unit u) { /* remover ícone */ }
+    void UpdateIcons() { /* posicionar ícones */ }
+    public void OnPointerClick(PointerEventData e) { /* click-to-move */ }
+    public void OnScroll(PointerEventData e) { /* zoom */ }
+    public void ZoomIn() { /* zoom in */ }
+    public void ZoomOut() { /* zoom out */ }
+    void SyncMinimapCamera() { /* sincronizar câmera */ }
+}
+```
+
+### 17.3 Subscrição de Eventos
+
+```csharp
+void OnEnable()
+{
+    // REFATORAÇÃO: Usar GameEvents em vez de UnitRegistry
+    GameEvents.OnUnitSpawned += HandleSpawn;
+    GameEvents.OnUnitDespawned += HandleDespawn;
+    
+    RebuildAll();
+    SyncMinimapCamera();
+}
+
+void OnDisable()
+{
+    // REFATORAÇÃO: Desinscrever do GameEvents
+    GameEvents.OnUnitSpawned -= HandleSpawn;
+    GameEvents.OnUnitDespawned -= HandleDespawn;
+    
+    ClearAll();
+}
+```
+
+### 17.4 Rebuild Inicial
+
+```csharp
+/// <summary>
+/// Popula minimapa com unidades existentes (ao ativar).
+/// </summary>
+void RebuildAll()
+{
+    ClearAll();
+    
+    // Criar ícone para cada unidade do registry
+    foreach (var u in UnitRegistry.All)
+    {
+        CreateIcon(u);
+    }
+}
+
+void ClearAll()
+{
+    // Retornar todos os ícones ao pool
+    foreach (var kv in _icons)
+    {
+        ReturnIcon(kv.Value);
+    }
+    _icons.Clear();
+}
+```
+
+### 17.5 Update (Follow Main View)
+
+```csharp
+void Update()
+{
+    // Seguir câmera principal (se habilitado)
+    if (followMainView && mainCamera != null && minimapCamera != null)
+    {
+        if (TryGetMainCenterOnGround(out var centerXZ))
+        {
+            // Atualizar centro do mapa
+            boundsCenter = centerXZ;
+            
+            // Tamanho vem do zoom (não da câmera principal)
+            float worldHeight = Mathf.Max(5f, baseWorldHeight * zoom);
+            float aspect = (float)minimapCamera.pixelWidth / Mathf.Max(1, minimapCamera.pixelHeight);
+            float worldWidth = worldHeight * aspect;
+            
+            boundsSize = new Vector2(worldWidth, worldHeight);
+            
+            // Sincronizar câmera do minimapa
+            SyncMinimapCamera();
+        }
+    }
+    
+    // Atualizar posição de ícones
+    UpdateIcons();
+}
+```
+
+**Explicação:**
+- `followMainView = true`: Minimapa acompanha o centro da câmera principal
+- `boundsCenter`: Centro do mapa segue o centro da câmera
+- `boundsSize`: Tamanho do mapa baseado em zoom (não na câmera principal)
+- `SyncMinimapCamera()`: Posiciona câmera ortográfica do minimapa
+
+### 17.6 Obter Centro da Câmera Principal
+
+```csharp
+/// <summary>
+/// Obtém centro da câmera principal (raycast no chão).
+/// </summary>
+bool TryGetMainCenterOnGround(out Vector2 centerXZ)
+{
+    centerXZ = default;
+    if (mainCamera == null) return false;
+    
+    // Ray do centro da tela (viewport 0.5, 0.5)
+    var ray = mainCamera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
+    
+    // Raycast no chão
+    if (Physics.Raycast(ray, out var hit, 50000f, groundMask, QueryTriggerInteraction.Ignore))
+    {
+        centerXZ = new Vector2(hit.point.x, hit.point.z);
+        return true;
+    }
+    
+    // Fallback: usar plano Y=groundY
+    var plane = new Plane(Vector3.up, new Vector3(0f, groundY, 0f));
+    if (plane.Raycast(ray, out float t))
+    {
+        var p = ray.GetPoint(t);
+        centerXZ = new Vector2(p.x, p.z);
+        return true;
+    }
+    
+    return false;
+}
+```
+
+### 17.7 Sincronização da Câmera do Minimapa
+
+```csharp
+/// <summary>
+/// Posiciona e configura câmera ortográfica do minimapa.
+/// </summary>
+void SyncMinimapCamera()
+{
+    if (!minimapCamera) return;
+    
+    // Posição (acima do centro do mapa)
+    minimapCamera.transform.position = new Vector3(
+        boundsCenter.x,
+        minimapCamera.transform.position.y, // Manter altura
+        boundsCenter.y
+    );
+    
+    // Rotação (olhando para baixo)
+    minimapCamera.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
+    
+    // Modo ortográfico
+    minimapCamera.orthographic = true;
+    
+    // Orthographic size = metade da ALTURA visível (em world units)
+    minimapCamera.orthographicSize = Mathf.Max(1f, boundsSize.y * 0.5f);
+}
+```
+
+**Explicação:**
+```
+boundsSize.y = 150 (world units de altura)
+orthographicSize = 150 / 2 = 75
+
+Câmera ortográfica renderiza:
+- Altura: 150 units (de -75 a +75)
+- Largura: 150 * aspect (ex: 150 * 1.0 = 150)
+```
+
+---
+
+## 18) SISTEMA DE ÍCONES E POOL
+
+### 18.1 Criação de Ícone
+
+```csharp
+/// <summary>
+/// Cria ícone para uma unidade.
+/// Usa pooling para performance.
+/// </summary>
+void CreateIcon(Unit u)
+{
+    if (u == null || _icons.ContainsKey(u)) return;
+    
+    // Obter ícone do pool (ou instanciar)
+    var rt = GetIcon();
+    rt.sizeDelta = iconSize;
+    
+    // Cor por facção
+    if (factionDb != null)
+    {
+        var def = factionDb.Get(u.owner);
+        var img = rt.GetComponent<Image>();
+        if (def != null && img != null)
+        {
+            img.color = def.color;
+        }
+    }
+    
+    _icons[u] = rt;
+}
+```
+
+### 18.2 Remoção de Ícone
+
+```csharp
+/// <summary>
+/// Remove ícone de uma unidade.
+/// Retorna ao pool.
+/// </summary>
+void RemoveIcon(Unit u)
+{
+    if (u == null) return;
+    
+    if (_icons.TryGetValue(u, out var rt))
+    {
+        _icons.Remove(u);
+        ReturnIcon(rt);
+    }
+}
+```
+
+### 18.3 Pooling
+
+```csharp
+/// <summary>
+/// Obtém ícone do pool (ou instancia novo).
+/// </summary>
+RectTransform GetIcon()
+{
+    RectTransform rt;
+    
+    if (_pool.Count > 0)
+    {
+        // Reusar do pool
+        rt = _pool.Pop();
+    }
+    else
+    {
+        // Instanciar novo
+        rt = Instantiate(iconPrefab, iconsRoot);
+    }
+    
+    rt.gameObject.SetActive(true);
+    rt.SetAsLastSibling();
+    return rt;
+}
+
+/// <summary>
+/// Retorna ícone ao pool.
+/// </summary>
+void ReturnIcon(RectTransform rt)
+{
+    if (!rt) return;
+    
+    rt.gameObject.SetActive(false);
+    rt.SetParent(iconsRoot, false);
+    _pool.Push(rt);
+}
+```
+
+**Benefícios do Pooling:**
+- ✅ Evita `Instantiate()` constante (caro)
+- ✅ Evita `Destroy()` constante (gera garbage)
+- ✅ Melhora performance em larga escala (100+ unidades)
+
+### 18.4 Atualização de Ícones
+
+```csharp
+/// <summary>
+/// Atualiza posição de todos os ícones a cada frame.
+/// Aplica culling e fade nas bordas.
+/// </summary>
+void UpdateIcons()
+{
+    if (!iconsRoot || minimapCamera == null) return;
+    
+    var rect = iconsRoot.rect;
+    
+    foreach (var kv in _icons)
+    {
+        var u = kv.Key;
+        var rt = kv.Value;
+        
+        if (u == null)
+        {
+            ReturnIcon(rt);
+            continue;
+        }
+        
+        // Converter posição world → viewport (0..1)
+        Vector3 vp = minimapCamera.WorldToViewportPoint(u.transform.position);
+        
+        // Verificar se está fora do minimapa
+        bool outside =
+            vp.z < 0f ||  // Atrás da câmera
+            vp.x < -uvBorderTolerance || vp.x > 1f + uvBorderTolerance ||
+            vp.y < -uvBorderTolerance || vp.y > 1f + uvBorderTolerance;
+        
+        // Esconder se estiver fora (e culling habilitado)
+        if (hideIconsOutside && outside)
+        {
+            if (rt.gameObject.activeSelf)
+                rt.gameObject.SetActive(false);
+            continue;
+        }
+        else if (!rt.gameObject.activeSelf)
+        {
+            rt.gameObject.SetActive(true);
+        }
+        
+        // Clampar viewport 0..1
+        float uNorm = Mathf.Clamp01(vp.x);
+        float vNorm = Mathf.Clamp01(vp.y);
+        
+        // Converter viewport → anchoredPosition
+        Vector2 anchored = new Vector2(
+            Mathf.Lerp(rect.xMin, rect.xMax, uNorm),
+            Mathf.Lerp(rect.yMin, rect.yMax, vNorm)
+        );
+        
+        rt.anchoredPosition = anchored;
+        
+        // Fade nas bordas (opcional)
+        if (fadeNearBorder)
+        {
+            var img = rt.GetComponent<Image>();
+            if (img != null)
+            {
+                // Distância da borda mais próxima
+                float edge = Mathf.Min(uNorm, 1f - uNorm, vNorm, 1f - vNorm);
+                
+                // Alpha baseado em distância
+                float a = Mathf.Clamp01(edge / Mathf.Max(0.0001f, fadeWidthUV));
+                
+                var c = img.color;
+                c.a = a;
+                img.color = c;
+            }
+        }
+    }
+}
+```
+
+**Explicação do Cálculo:**
+
+```
+Unit position (world): (100, 0, 50)
+MinimapCamera: viewport (0.6, 0.4, 5)
+
+Normalizar:
+uNorm = Clamp01(0.6) = 0.6
+vNorm = Clamp01(0.4) = 0.4
+
+IconsRoot.rect: (-100, -100, 100, 100) [200x200]
+
+Anchored position:
+x = Lerp(-100, 100, 0.6) = 20
+y = Lerp(-100, 100, 0.4) = -20
+
+→ Ícone aparece em (20, -20) dentro do minimapa
+```
+
+---
+
+## 19) ZOOM E NAVEGAÇÃO
+
+### 19.1 Zoom por Scroll
+
+```csharp
+/// <summary>
+/// Handler de scroll do mouse (IScrollHandler).
+/// Scroll up = zoom in, scroll down = zoom out.
+/// </summary>
+public void OnScroll(PointerEventData eventData)
+{
+    // Scroll up (delta.y > 0) = aproximar (diminuir zoom)
+    // Scroll down (delta.y < 0) = afastar (aumentar zoom)
+    float delta = -eventData.scrollDelta.y * zoomScrollSensitivity;
+    
+    SetZoom(zoom + delta);
+}
+```
+
+### 19.2 Zoom por Botões
+
+```csharp
+/// <summary>
+/// Botão "+" (aproximar).
+/// </summary>
+public void ZoomIn()
+{
+    SetZoom(zoom - zoomStepButtons);
+}
+
+/// <summary>
+/// Botão "-" (afastar).
+/// </summary>
+public void ZoomOut()
+{
+    SetZoom(zoom + zoomStepButtons);
+}
+```
+
+### 19.3 Aplicar Zoom
+
+```csharp
+/// <summary>
+/// Define zoom e sincroniza câmera do minimapa.
+/// </summary>
+void SetZoom(float z)
+{
+    zoom = Mathf.Clamp(z, minZoom, maxZoom);
+    
+    // Forçar sync imediato (Update também fará)
+    SyncMinimapCamera();
+}
+```
+
+**Explicação:**
+
+```
+baseWorldHeight = 150
+zoom = 1.0 → worldHeight = 150 (padrão)
+zoom = 0.5 → worldHeight = 75  (mais próximo)
+zoom = 3.0 → worldHeight = 450 (mais longe)
+
+orthographicSize = worldHeight / 2
+zoom = 0.5 → orthSize = 37.5 (vê menos área)
+zoom = 3.0 → orthSize = 225  (vê mais área)
+```
+
+### 19.4 Gizmos (Debug)
+
+```csharp
+/// <summary>
+/// Desenha bounds do minimapa no Scene View.
+/// </summary>
+void OnDrawGizmosSelected()
+{
+    Gizmos.color = new Color(0f, 1f, 0f, 0.15f);
+    
+    var center = new Vector3(boundsCenter.x, groundY, boundsCenter.y);
+    var size = new Vector3(boundsSize.x, 0.1f, boundsSize.y);
+    
+    Gizmos.DrawCube(center, size);
+    Gizmos.color = Color.green;
+    Gizmos.DrawWireCube(center, size);
+}
+```
+
+---
+
+## 20) CLICK-TO-MOVE (GO TO)
+
+### 20.1 Handler de Clique
+
+```csharp
+/// <summary>
+/// Handler de clique no minimapa (IPointerClickHandler).
+/// Left/Right click: move câmera principal para posição clicada.
+/// </summary>
+public void OnPointerClick(PointerEventData e)
+{
+    // Aceitar left ou right click
+    if (e.button != PointerEventData.InputButton.Left &&
+        e.button != PointerEventData.InputButton.Right)
+        return;
+    
+    if (!minimapImage || !rtsCamera || minimapCamera == null)
+        return;
+    
+    // 1. Converter clique (screenPos) → local (dentro do RawImage)
+    var local = ScreenToLocal(minimapImage.rectTransform, e.position, e.pressEventCamera);
+    
+    // 2. Converter local → viewport (0..1)
+    var rect = minimapImage.rectTransform.rect;
+    float u = Mathf.InverseLerp(rect.xMin, rect.xMax, local.x);
+    float v = Mathf.InverseLerp(rect.yMin, rect.yMax, local.y);
+    
+    // 3. Ray a partir da MinimapCamera
+    Ray ray = minimapCamera.ViewportPointToRay(new Vector3(u, v, 0f));
+    
+    // 4. Raycast no chão (ou usar plano fallback)
+    Vector3 world;
+    if (Physics.Raycast(ray, out var hit, 50000f, groundMask, QueryTriggerInteraction.Ignore))
+    {
+        world = hit.point;
+    }
+    else
+    {
+        // Fallback: plano Y=groundY
+        var plane = new Plane(Vector3.up, new Vector3(0f, groundY, 0f));
+        if (!plane.Raycast(ray, out float t)) return;
+        world = ray.GetPoint(t);
+    }
+    
+    // 5. Mover câmera principal para posição clicada
+    rtsCamera.GoToXZ(new Vector2(world.x, world.z), snap: false, duration: 0.35f);
+}
+```
+
+**Explicação:**
+
+```
+Usuário clica em (800, 300) (screenPos)
+    │
+    ↓ (ScreenToLocal)
+Local dentro do RawImage: (50, -20)
+    │
+    ↓ (InverseLerp)
+Viewport (0..1): u=0.6, v=0.4
+    │
+    ↓ (ViewportPointToRay)
+Ray da MinimapCamera
+    │
+    ↓ (Raycast)
+World position: (120, 0, 80)
+    │
+    ↓ (GoToXZ)
+RTSCamera move para (120, 80)
+```
+
+### 20.2 Conversão Screen → Local
+
+```csharp
+/// <summary>
+/// Converte posição de tela para local dentro de um RectTransform.
+/// </summary>
+Vector2 ScreenToLocal(RectTransform rt, Vector2 screenPos, Camera uiCam)
+{
+    RectTransformUtility.ScreenPointToLocalPointInRectangle(
+        rt, screenPos, uiCam, out var local
+    );
+    return local;
+}
+```
+
+### 20.3 Integração com RTSCamera
+
+**RTSCameraCinemachineV3Controller.cs (Lote 2 - resumo):**
+
+```csharp
+/// <summary>
+/// Move câmera para posição XZ (mapa 2D).
+/// </summary>
+public void GoToXZ(Vector2 targetXZ, bool snap, float duration)
+{
+    if (snap)
+    {
+        // Teleportar imediatamente
+        transform.position = new Vector3(targetXZ.x, transform.position.y, targetXZ.y);
+    }
+    else
+    {
+        // Animar movimento
+        DOTween.To(
+            () => new Vector2(transform.position.x, transform.position.z),
+            v => transform.position = new Vector3(v.x, transform.position.y, v.y),
+            targetXZ,
+            duration
+        ).SetEase(Ease.OutCubic);
+    }
+}
+```
+
+---
+
+## 21) DISABLEMINIMAPSHADOWS - OTIMIZAÇÃO
+
+### 21.1 Visão Geral
+
+**Tipo:** `MonoBehaviour`  
+**Arquivo:** `DisableMinimapShadows.cs`  
+**Responsabilidade:** Desabilita sombras em objetos renderizados pela câmera do minimapa (otimização).
+
+### 21.2 Código Completo
+
+```csharp
+using UnityEngine;
+
+/// <summary>
+/// Desabilita sombras em objetos vistos pela câmera do minimapa.
+/// Otimização: sombras não são necessárias no minimapa.
+/// </summary>
+public class DisableMinimapShadows : MonoBehaviour
+{
+    [Header("Refs")]
+    [SerializeField] private Camera minimapCamera;
+    
+    void Start()
+    {
+        if (minimapCamera == null)
+        {
+            minimapCamera = GetComponent<Camera>();
+        }
+        
+        if (minimapCamera != null)
+        {
+            // Desabilitar sombras para esta câmera
+            minimapCamera.cullingMask &= ~(1 << LayerMask.NameToLayer("ShadowsOnly"));
+            
+            // Ou, se quiser desabilitar globalmente para esta câmera:
+            // minimapCamera.clearFlags = CameraClearFlags.SolidColor;
+            // minimapCamera.backgroundColor = Color.black;
+            
+            Debug.Log("Minimap shadows disabled");
+        }
+    }
+}
+```
+
+### 21.3 Alternativa: Desabilitar via Quality Settings
+
+```csharp
+void Start()
+{
+    if (minimapCamera != null)
+    {
+        // Desabilitar todas as sombras para esta câmera
+        minimapCamera.clearFlags = CameraClearFlags.SolidColor;
+        minimapCamera.backgroundColor = new Color(0.1f, 0.1f, 0.1f); // Cinza escuro
+        
+        // Ou criar layer "NoShadows" e colocar objetos do minimapa nele
+    }
+}
+```
+
+### 21.4 Setup Recomendado
+
+**Opção 1: Culling Mask**
+```
+MinimapCamera
+├── Culling Mask: Everything EXCEPT ShadowsOnly
+└── Clear Flags: Solid Color (preto)
+```
+
+**Opção 2: Layer Separado**
+```
+1. Criar layer "Minimap"
+2. Colocar objetos visíveis no minimapa neste layer
+3. MinimapCamera.cullingMask = (1 << LayerMask.NameToLayer("Minimap"))
+```
+
+---
+
+# PARTE VII: INTEGRAÇÃO E PATTERNS
+
+---
+
+## 22) FACTIONDATABASE - SISTEMA DE FACÇÕES
+
+### 22.1 Visão Geral
+
+**Tipo:** `ScriptableObject`  
+**Arquivo:** `FactionDatabase.cs`  
+**Responsabilidade:** Database de facções (cores, ícones, nomes). Usado pelo minimapa e outros sistemas.
+
+### 22.2 Estrutura Completa
+
+```csharp
+using System.Collections.Generic;
+using UnityEngine;
+
+/// <summary>
+/// Database de facções (ScriptableObject).
+/// Armazena definições de todas as facções do jogo.
+/// </summary>
+[CreateAssetMenu(fileName = "FactionDatabase", menuName = "Game/Faction Database")]
+public class FactionDatabase : ScriptableObject
+{
+    public List<FactionDefinition> factions = new();
+    
+    /// <summary>
+    /// Obtém definição de uma facção por ID.
+    /// </summary>
+    public FactionDefinition Get(FactionId id)
+    {
+        return factions.Find(f => f.id == id);
+    }
+}
+
+/// <summary>
+/// Definição de uma facção.
+/// </summary>
+[System.Serializable]
+public class FactionDefinition
+{
+    public FactionId id;           // Enum ID
+    public string displayName;     // Nome exibido
+    public Color color;            // Cor da facção (minimapa, UI)
+    public Sprite icon;            // Ícone/brasão da facção
+    public Sprite banner;          // Banner (opcional)
+}
+
+/// <summary>
+/// IDs de facções.
+/// </summary>
+public enum FactionId
+{
+    None = 0,
+    Player1 = 1,
+    Player2 = 2,
+    Player3 = 3,
+    Player4 = 4,
+    Neutral = 99,
+    Enemy = 100
+}
+```
+
+### 22.3 Uso no Minimapa
+
+```csharp
+// MinimapController.CreateIcon()
+void CreateIcon(Unit u)
+{
+    // ... criar ícone ...
+    
+    // Cor por facção
+    if (factionDb != null)
+    {
+        var def = factionDb.Get(u.owner);
+        var img = rt.GetComponent<Image>();
+        if (def != null && img != null)
+        {
+            img.color = def.color; // Verde para Player1, Vermelho para Enemy, etc
+        }
+    }
+}
+```
+
+### 22.4 Exemplo de Configuração
+
+**FactionDatabase (ScriptableObject):**
+
+```
+FactionDatabase
+├── factions[0]: Player1
+│   ├── id: Player1
+│   ├── displayName: "Kingdom of Elaria"
+│   ├── color: (0.2, 0.8, 0.2, 1) → Verde
+│   ├── icon: ElariaCrest.png
+│   └── banner: ElariaBanner.png
+│
+├── factions[1]: Player2
+│   ├── id: Player2
+│   ├── displayName: "Empire of Drakonor"
+│   ├── color: (0.8, 0.2, 0.2, 1) → Vermelho
+│   └── ...
+│
+└── factions[2]: Neutral
+    ├── id: Neutral
+    ├── displayName: "Neutral Forces"
+    ├── color: (0.7, 0.7, 0.7, 1) → Cinza
+    └── ...
+```
+
+---
+
+## 23) EVENT BUS INTEGRATION
+
+### 23.1 Eventos Utilizados (Resumo Completo)
+
+| Evento | Emissor | Listeners | Payload |
+|--------|---------|-----------|---------|
+| `OnTimeOfDay` | TimeManager | LightingController, SkyboxController, NPCs | `float time01` |
+| `OnDayChanged` | TimeManager | Farm (produção), Quest (prazo) | `int dayCount` |
+| `OnClockChanged` | TimeManager | ClockUI | `int day, int hour, int minute` |
+| `OnUnitSpawned` | UnitRegistry | MinimapController, UnitListPanel | `Unit unit` |
+| `OnUnitDespawned` | UnitRegistry | MinimapController, UnitListPanel | `Unit unit` |
+| `OnSelectionChanged` | SelectionManager | UnitListPanel, UnitActionButtons | `IReadOnlyCollection<Unit>` |
+| `OnResourceChanged` | ResourceManager (futuro) | ResourceDisplayUI | `ResourceType, int amount` |
+| `OnRankingUpdated` | RankingSystem (futuro) | RankingUI | `List<RankEntry>` |
+| `OnChatMessageReceived` | ChatSystem (futuro) | ChatUI | `ChatMessage` |
+| `OnGroupCreated` | UnitListPanel | GroupHotkeyManager | `UnitGroup` |
+| `OnGroupDeleted` | UnitListPanel | GroupHotkeyManager | `UnitGroup` |
+
+### 23.2 Diagrama de Event Bus Completo
+
+```
+┌──────────────────────────────────────────────────────────┐
+│                   GameEvents (Event Bus)                  │
+│  ┌────────────────────────────────────────────────┐      │
+│  │ public static event Action<...> OnXXX;         │      │
+│  │ public static void RaiseXXX(...) { ... }       │      │
+│  └────────────────────────────────────────────────┘      │
+└────────────────┬─────────────────────────────────────────┘
+                 │
+    ┌────────────┼────────────┬───────────────┬────────────┐
+    │            │            │               │            │
+    ↓            ↓            ↓               ↓            ↓
+┌─────────┐ ┌─────────┐ ┌──────────┐ ┌──────────┐ ┌────────┐
+│TimeMan  │ │UnitReg  │ │Selection │ │Resource  │ │Ranking │
+│ager     │ │istry    │ │Manager   │ │Manager   │ │System  │
+└────┬────┘ └────┬────┘ └────┬─────┘ └────┬─────┘ └────┬───┘
+     │           │           │            │            │
+     ↓           ↓           ↓            ↓            ↓
+┌─────────┐ ┌─────────┐ ┌──────────┐ ┌──────────┐ ┌────────┐
+│ClockUI  │ │Minimap  │ │UnitList  │ │Resource  │ │Ranking │
+│         │ │Ctrl     │ │Panel     │ │Display   │ │UI      │
+└─────────┘ └─────────┘ └──────────┘ └──────────┘ └────────┘
+```
+
+---
+
+## 24) FLUXO DE INICIALIZAÇÃO COMPLETO
+
+### 24.1 Sequência de Startup
+
+```
+1. Unity Scene Load
+   │
+2. Awake() de todos os MonoBehaviours
+   ├─→ TimeManager.Awake()
+   │   └─→ Inicializar Time01 com startTime01
+   │
+   ├─→ MinimapController.Awake() (se houver)
+   │
+   └─→ ClockUI.Awake() (se houver)
+   │
+3. OnEnable() de todos os MonoBehaviours
+   ├─→ ClockUI.OnEnable()
+   │   └─→ GameEvents.OnClockChanged += UpdateClock
+   │
+   ├─→ MinimapController.OnEnable()
+   │   ├─→ GameEvents.OnUnitSpawned += HandleSpawn
+   │   ├─→ GameEvents.OnUnitDespawned += HandleDespawn
+   │   ├─→ RebuildAll() (criar ícones de unidades existentes)
+   │   └─→ SyncMinimapCamera()
+   │
+   └─→ ResourceDisplayUI.OnEnable() (futuro)
+       └─→ GameEvents.OnResourceChanged += OnResourceChanged
+   │
+4. Start() de todos os MonoBehaviours
+   ├─→ ClockUI.Start()
+   │   └─→ Sincronizar com TimeManager (display inicial)
+   │
+   ├─→ ResourceDisplayUI.Start() (futuro)
+   │   └─→ Sincronizar com ResourceManager
+   │
+   └─→ TimeManager.Start() (se houver)
+   │
+5. Primeiro Update()
+   ├─→ TimeManager.Update()
+   │   ├─→ Avançar Time01
+   │   ├─→ Converter para HH:MM
+   │   ├─→ GameEvents.RaiseClockChanged(...)
+   │   │       │
+   │   │       ↓
+   │   │   ClockUI.UpdateClock(...)
+   │   │       │
+   │   │       └─→ ClockUI.Update() → Atualizar textos
+   │   │
+   │   └─→ GameEvents.RaiseTimeOfDay(Time01)
+   │
+   └─→ MinimapController.Update()
+       ├─→ Seguir câmera principal (se followMainView)
+       ├─→ SyncMinimapCamera()
+       └─→ UpdateIcons() (posicionar ícones)
+```
+
+### 24.2 Primeira Unidade Spawn
+
+```
+[Unit GameObject Ativa]
+    │
+    ↓ (Lote 3)
+Unit.OnEnable()
+    │
+    ↓
+UnitRegistry.Register(unit)
+    │
+    ↓ (Lote 1)
+GameEvents.RaiseUnitSpawned(unit)
+    │
+    ↓ (Lote 5 - Minimapa)
+MinimapController.HandleSpawn(unit)
+    │
+    ├─→ CreateIcon(unit)
+    │   ├─→ GetIcon() (do pool ou Instantiate)
+    │   ├─→ Colorir por facção (FactionDatabase)
+    │   └─→ _icons[unit] = rt
+    │
+    └─→ [Ícone Visível no Minimapa]
+```
+
+---
+
+# PARTE VIII: IMPLEMENTAÇÃO E MANUTENÇÃO
+
+---
+
+## 25) ROADMAP DE IMPLEMENTAÇÃO
+
+### 25.1 Fase 1: Fundação (CONCLUÍDA ✅)
+
+**Sistemas Core:**
+- [x] TimeManager (avanço de tempo)
+- [x] ClockUI (display de relógio)
+- [x] MinimapController (ícones, zoom, click-to-move)
+- [x] FactionDatabase (cores de facção)
+- [x] GameEvents (eventos de tempo e unidades)
+
+**Integração:**
+- [x] TimeManager → ClockUI via `OnClockChanged`
+- [x] UnitRegistry → MinimapController via `OnUnitSpawned/OnUnitDespawned`
+- [x] RTSCamera → MinimapController (click-to-move)
+
+### 25.2 Fase 2: Recursos e Economia (PRÓXIMA PRIORIDADE 🔥)
+
+**Tarefas:**
+
+1. **ResourceManager (1-2 dias)**
+   ```
+   - [ ] Criar ResourceManager.cs (singleton)
+   - [ ] Implementar GetResource, AddResource, TrySpendResources
+   - [ ] Integrar com GameEvents (OnResourceChanged)
+   - [ ] Testar com script de debug (AddResource via botão)
+   ```
+
+2. **ResourceDisplayUI (1 dia)**
+   ```
+   - [ ] Criar ResourceDisplayUI.cs
+   - [ ] Ligar refs no Inspector (goldText, woodText, foodText)
+   - [ ] Subscribe em OnResourceChanged
+   - [ ] Testar atualização de UI
+   ```
+
+3. **Integração com Gameplay (2-3 dias)**
+   ```
+   - [ ] Construções consomem recursos
+   - [ ] Treinar unidades consome recursos
+   - [ ] Farms/minas produzem recursos
+   - [ ] Feedback visual (sem recursos suficientes)
+   ```
+
+### 25.3 Fase 3: Comandos e Ações (ALTA PRIORIDADE 🔥)
+
+**Tarefas:**
+
+1. **CommandController (2-3 dias)**
+   ```
+   - [ ] Criar CommandController.cs (Command Pattern)
+   - [ ] Implementar MoveCommand, AttackCommand, DefendCommand, HoldCommand
+   - [ ] Integrar com SelectionManager
+   - [ ] Testar comandos via hotkeys (S = Stop, D = Defend)
+   ```
+
+2. **UnitActionButtons (1-2 dias)**
+   ```
+   - [ ] Criar UnitActionButtons.cs
+   - [ ] Criar prefab de botões (Move, Attack, Defend, etc)
+   - [ ] Ligar botões ao CommandController
+   - [ ] Atualizar visuais baseado em seleção
+   ```
+
+3. **GroupHotkeyManager (1-2 dias)**
+   ```
+   - [ ] Criar GroupHotkeyManager.cs
+   - [ ] Implementar Ctrl+1~9 (criar grupo)
+   - [ ] Implementar 1~9 (selecionar grupo)
+   - [ ] Integrar com UnitListPanel (grupos aparecem em ambos)
+   - [ ] Feedback visual (slot de hotkey ocupado)
+   ```
+
+4. **InputManager (1 dia)**
+   ```
+   - [ ] Criar InputManager.cs (centralizar input)
+   - [ ] Mapear hotkeys (WASD = mover câmera, Ctrl+1~9 = grupos, etc)
+   - [ ] Permitir rebinding (opcional)
+   ```
+
+### 25.4 Fase 4: Social e Multiplayer (MÉDIA PRIORIDADE)
+
+**Tarefas:**
+
+1. **RankingSystem (2-3 dias)**
+   ```
+   - [ ] Criar RankingSystem.cs
+   - [ ] Implementar cálculo de score (unidades + construções + recursos)
+   - [ ] Update periódico (a cada 10s)
+   - [ ] Integrar com GameEvents (OnRankingUpdated)
+   ```
+
+2. **RankingUI (1 dia)**
+   ```
+   - [ ] Criar RankingUI.cs + RankEntryUI.cs
+   - [ ] Criar prefab de painel de ranking
+   - [ ] Botão "Ranking" no Top HUD (toggle painel)
+   - [ ] Lista de jogadores ordenados por score
+   ```
+
+3. **ChatSystem (3-4 dias)**
+   ```
+   - [ ] Criar ChatSystem.cs
+   - [ ] Integrar com sistema de rede (Mirror/Netcode)
+   - [ ] Implementar SendMessage, ReceiveMessage
+   - [ ] Integrar com GameEvents (OnChatMessageReceived)
+   ```
+
+4. **ChatUI (1-2 dias)**
+   ```
+   - [ ] Criar ChatUI.cs + ChatMessageUI.cs
+   - [ ] Criar prefab de painel de chat
+   - [ ] Input field + botão "Send"
+   - [ ] ScrollRect com histórico de mensagens
+   - [ ] Botão "Chat" no Top HUD (toggle painel)
+   ```
+
+### 25.5 Fase 5: Polimento e UX (BAIXA PRIORIDADE)
+
+**Tarefas:**
+
+1. **Notificações (2 dias)**
+   ```
+   - [ ] Sistema de notificações (toasts)
+   - [ ] "Recursos insuficientes"
+   - [ ] "Construção completa"
+   - [ ] "Unidade treinada"
+   ```
+
+2. **Tooltips (1-2 dias)**
+   ```
+   - [ ] Tooltip ao hover em botões
+   - [ ] Tooltip ao hover em recursos (mostrar taxa de produção)
+   - [ ] Tooltip ao hover em unidades (stats)
+   ```
+
+3. **Animações (2-3 dias)**
+   ```
+   - [ ] Fade in/out de painéis
+   - [ ] Pulse ao ganhar/perder recursos
+   - [ ] Shake ao clicar sem recursos
+   - [ ] Smooth scroll no minimapa
+   ```
+
+4. **Feedback Visual (1 dia)**
+   ```
+   - [ ] Flash ao gastar recursos
+   - [ ] Partículas ao criar grupo
+   - [ ] Som ao clicar em botão
+   ```
+
+### 25.6 Estimativa de Tempo Total
+
+| Fase | Dias de Trabalho | Status |
+|------|------------------|--------|
+| Fase 1: Fundação | ~5 dias | ✅ Concluída |
+| Fase 2: Recursos | ~5 dias | ⏳ Próxima |
+| Fase 3: Comandos | ~7 dias | 🔜 Futura |
+| Fase 4: Social | ~8 dias | 🔜 Futura |
+| Fase 5: Polimento | ~6 dias | 🔜 Futura |
+| **TOTAL** | **~31 dias** | **~6 semanas** |
+
+---
+
+## 26) ESTRUTURA DE ARQUIVOS
+
+### 26.1 Organização de Scripts
+
+```
+Assets/
+├── Scripts/
+│   ├── UI/
+│   │   ├── TopHUD/
+│   │   │   ├── Time/
+│   │   │   │   ├── TimeManager.cs                 ✅ Implementado
+│   │   │   │   └── ClockUI.cs                     ✅ Implementado
+│   │   │   │
+│   │   │   ├── Resources/
+│   │   │   │   ├── ResourceManager.cs             ⏳ Futuro
+│   │   │   │   └── ResourceDisplayUI.cs           ⏳ Futuro
+│   │   │   │
+│   │   │   ├── Ranking/
+│   │   │   │   ├── RankingSystem.cs               ⏳ Futuro
+│   │   │   │   ├── RankingUI.cs                   ⏳ Futuro
+│   │   │   │   └── RankEntryUI.cs                 ⏳ Futuro
+│   │   │   │
+│   │   │   └── Chat/
+│   │   │       ├── ChatSystem.cs                  ⏳ Futuro
+│   │   │       ├── ChatUI.cs                      ⏳ Futuro
+│   │   │       └── ChatMessageUI.cs               ⏳ Futuro
+│   │   │
+│   │   ├── ButtonHUD/
+│   │   │   ├── CommandController.cs               ⏳ Futuro
+│   │   │   ├── UnitActionButtons.cs               ⏳ Futuro
+│   │   │   └── GroupHotkeyManager.cs              ⏳ Futuro
+│   │   │
+│   │   ├── Minimap/
+│   │   │   ├── MinimapController.cs               ✅ Implementado
+│   │   │   └── DisableMinimapShadows.cs           ✅ Implementado
+│   │   │
+│   │   └── UnitList/ (Lote 5 - Parte 1)
+│   │       ├── Core/
+│   │       │   ├── UnitListPanel.cs               ✅ Documentado
+│   │       │   ├── ListItemWrapper.cs             ✅ Documentado
+│   │       │   └── IListItemModel.cs              ✅ Documentado
+│   │       └── ...
+│   │
+│   ├── Core/
+│   │   ├── GameEvents.cs (Lote 1)                 ✅ Existente
+│   │   ├── GameConfig.cs (Lote 1)                 ✅ Existente
+│   │   └── ...
+│   │
+│   ├── Factions/
+│   │   ├── FactionDatabase.cs                     ✅ Implementado
+│   │   └── FactionDefinition.cs                   (inline no database)
+│   │
+│   └── Input/ (futuro)
+│       └── InputManager.cs                        ⏳ Futuro
+│
+└── Prefabs/
+    ├── UI/
+    │   ├── TopHUD.prefab
+    │   ├── ButtonHUD.prefab
+    │   ├── Minimap.prefab
+    │   ├── MinimapIcon.prefab
+    │   └── UnitList.prefab (Parte 1)
+    │
+    └── ...
+```
+
+### 26.2 ScriptableObjects
+
+```
+Assets/
+└── Data/
+    ├── Config/
+    │   └── GameConfig.asset                       ✅ Existente
+    │
+    └── Factions/
+        └── FactionDatabase.asset                  ✅ Existente
+```
+
+---
+
+## 27) SOLUÇÃO DE PROBLEMAS
+
+### 27.1 Problema: "Relógio não atualiza"
+
+**Sintomas:**
+- ClockUI mostra "Day 0, Time 00:00" e não muda
+- Console não mostra erros
+
+**Diagnóstico:**
+```csharp
+// No ClockUI.OnEnable()
+void OnEnable()
+{
+    Debug.Log("[ClockUI] OnEnable - subscribing to OnClockChanged");
+    GameEvents.OnClockChanged += UpdateClock;
+}
+
+// No TimeManager.Update()
+if (Minute != _lastMinute)
+{
+    Debug.Log($"[TimeManager] Clock changed: Day={DayCount}, Hour={Hour}, Minute={Minute}");
+    GameEvents.RaiseClockChanged(DayCount, Hour, Minute);
+}
+```
+
+**Causas Comuns:**
+1. `TimeManager.config` não está ligado (null)
+2. `ClockUI.OnEnable()` não foi chamado (objeto desativado)
+3. `GameEvents.OnClockChanged` não tem listeners
+
+**Solução:**
+```csharp
+// Validar config
+void Update()
+{
+    if (config == null)
+    {
+        Debug.LogError("[TimeManager] GameConfig is null!");
+        return;
+    }
+    // ... resto
+}
+
+// Validar ClockUI ativo
+void Start()
+{
+    if (!gameObject.activeInHierarchy)
+    {
+        Debug.LogWarning("[ClockUI] GameObject is not active!");
+    }
+}
+```
+
+---
+
+### 27.2 Problema: "Ícones do minimapa não aparecem"
+
+**Sintomas:**
+- Minimapa vazio (sem ícones de unidades)
+- Unidades existem na cena
+
+**Diagnóstico:**
+```csharp
+// No MinimapController.HandleSpawn()
+void HandleSpawn(Unit u)
+{
+    Debug.Log($"[MinimapController] Spawn: {u?.DisplayName}");
+    CreateIcon(u);
+}
+
+// No CreateIcon()
+void CreateIcon(Unit u)
+{
+    if (u == null)
+    {
+        Debug.LogWarning("[MinimapController] CreateIcon: unit is null!");
+        return;
+    }
+    
+    if (_icons.ContainsKey(u))
+    {
+        Debug.LogWarning($"[MinimapController] Icon already exists for {u.DisplayName}");
+        return;
+    }
+    
+    Debug.Log($"[MinimapController] Creating icon for {u.DisplayName}");
+    // ... resto
+}
+```
+
+**Causas Comuns:**
+1. `minimapCamera` não está ligado
+2. `iconPrefab` não está ligado
+3. `iconsRoot` não está ligado
+4. Unidades spawnadas antes de `MinimapController.OnEnable()`
+5. Culling esconde ícones (`hideIconsOutside = true`)
+
+**Solução:**
+```csharp
+// Validar refs no Awake
+void Awake()
+{
+    if (minimapCamera == null)
+        Debug.LogError("[MinimapController] minimapCamera is null!");
+    
+    if (iconPrefab == null)
+        Debug.LogError("[MinimapController] iconPrefab is null!");
+    
+    if (iconsRoot == null)
+        Debug.LogError("[MinimapController] iconsRoot is null!");
+}
+
+// RebuildAll no OnEnable (pega unidades já spawnadas)
+void OnEnable()
+{
+    // ... subscribe ...
+    
+    RebuildAll(); // IMPORTANTE
+    SyncMinimapCamera();
+}
+```
+
+---
+
+### 27.3 Problema: "Click no minimapa não move câmera"
+
+**Sintomas:**
+- Clicar no minimapa não faz nada
+- Ou move para posição errada
+
+**Diagnóstico:**
+```csharp
+public void OnPointerClick(PointerEventData e)
+{
+    Debug.Log($"[MinimapController] Click: button={e.button}, pos={e.position}");
+    
+    // ... conversão ...
+    
+    Debug.Log($"[MinimapController] Viewport: u={u}, v={v}");
+    Debug.Log($"[MinimapController] World: {world}");
+    
+    // ...
+}
+```
+
+**Causas Comuns:**
+1. `rtsCamera` não está ligado
+2. `minimapCamera` não está ligado
+3. `minimapImage` não tem `GraphicRaycaster`
+4. Canvas não tem `GraphicRaycaster`
+5. Raycast não acerta o chão (`groundMask` incorreto)
+
+**Solução:**
+```csharp
+// Validar refs
+void Awake()
+{
+    if (rtsCamera == null)
+        Debug.LogError("[MinimapController] rtsCamera is null!");
+    
+    if (minimapImage == null)
+        Debug.LogError("[MinimapController] minimapImage is null!");
+}
+
+// Validar raycast
+public void OnPointerClick(PointerEventData e)
+{
+    // ... código existente ...
+    
+    if (Physics.Raycast(ray, out var hit, 50000f, groundMask, QueryTriggerInteraction.Ignore))
+    {
+        Debug.Log($"[MinimapController] Raycast HIT: {hit.point}");
+        world = hit.point;
+    }
+    else
+    {
+        Debug.LogWarning("[MinimapController] Raycast MISS - using plane fallback");
+        // ... plane fallback ...
+    }
+}
+```
+
+---
+
+### 27.4 Problema: "Zoom do minimapa não funciona"
+
+**Sintomas:**
+- Scroll/botões não mudam zoom
+- Zoom está travado
+
+**Diagnóstico:**
+```csharp
+public void OnScroll(PointerEventData eventData)
+{
+    Debug.Log($"[MinimapController] Scroll: delta={eventData.scrollDelta}");
+    
+    float delta = -eventData.scrollDelta.y * zoomScrollSensitivity;
+    Debug.Log($"[MinimapController] Zoom delta: {delta}, zoom={zoom}");
+    
+    SetZoom(zoom + delta);
+}
+
+void SetZoom(float z)
+{
+    float oldZoom = zoom;
+    zoom = Mathf.Clamp(z, minZoom, maxZoom);
+    Debug.Log($"[MinimapController] SetZoom: {oldZoom} → {zoom}");
+    
+    SyncMinimapCamera();
+}
+```
+
+**Causas Comuns:**
+1. `minimapImage` não implementa `IScrollHandler` (mas `MinimapController` sim)
+2. `EventSystem` ausente
+3. `minZoom == maxZoom` (range inválido)
+
+**Solução:**
+```csharp
+// Verificar range
+void OnValidate()
+{
+    if (minZoom >= maxZoom)
+    {
+        Debug.LogWarning("[MinimapController] minZoom >= maxZoom - fixing range");
+        minZoom = 0.5f;
+        maxZoom = 3.0f;
+    }
+}
+
+// Verificar EventSystem
+void Start()
+{
+    var es = FindFirstObjectByType<EventSystem>();
+    if (es == null)
+    {
+        Debug.LogError("[MinimapController] EventSystem not found in scene!");
+    }
+}
+```
+
+---
+
+### 27.5 Problema: "Ícones aparecem fora do minimapa"
+
+**Sintomas:**
+- Ícones ultrapassam bordas do minimapa
+- Aparecem em posições incorretas
+
+**Diagnóstico:**
+```csharp
+void UpdateIcons()
+{
+    // ...
+    
+    Vector3 vp = minimapCamera.WorldToViewportPoint(u.transform.position);
+    Debug.Log($"[Icon] {u.DisplayName}: viewport=({vp.x}, {vp.y}, {vp.z})");
+    
+    // ...
+}
+```
+
+**Causas:**
+1. `clampIconsInside = false`
+2. `uvBorderTolerance` muito alto
+3. Câmera do minimapa mal configurada
+
+**Solução:**
+```csharp
+// Forçar clamp
+void UpdateIcons()
+{
+    // ...
+    
+    float uNorm = Mathf.Clamp01(vp.x); // SEMPRE clampar
+    float vNorm = Mathf.Clamp01(vp.y);
+    
+    // ...
+}
+
+// Verificar câmera
+void SyncMinimapCamera()
+{
+    if (!minimapCamera) return;
+    
+    // Garantir modo ortográfico
+    if (!minimapCamera.orthographic)
+    {
+        Debug.LogWarning("[MinimapController] Camera is not orthographic!");
+        minimapCamera.orthographic = true;
+    }
+    
+    // ...
+}
+```
+
+---
+
+## 28) CHECKLIST DE VALIDAÇÃO
+
+### 28.1 Top HUD (Time)
+
+**TimeManager:**
+- [ ] `GameConfig` ligado no Inspector
+- [ ] `startTime01` configurado (ex: 0.25 = amanhecer)
+- [ ] Play → Time01 avança (watch no Inspector)
+- [ ] Console mostra logs de `RaiseClockChanged` (se debug ativo)
+
+**ClockUI:**
+- [ ] `timeManager` ligado no Inspector
+- [ ] `clockText` ligado (TMP_Text "Time XX:XX")
+- [ ] `dayText` ligado (TMP_Text "Day X")
+- [ ] Play → Relógio atualiza a cada minuto in-game
+- [ ] Dia avança ao chegar 24:00
+
+### 28.2 Top HUD (Resources - Futuro)
+
+**ResourceManager:**
+- [ ] Singleton funciona (só uma instância)
+- [ ] `startingGold/Wood/Food` configurados
+- [ ] Play → Console mostra recursos iniciais
+- [ ] AddResource() aumenta recursos
+- [ ] TrySpendResources() retorna false se insuficiente
+
+**ResourceDisplayUI:**
+- [ ] Textos ligados (goldText, woodText, foodText)
+- [ ] Play → Mostra valores iniciais
+- [ ] AddResource() → UI atualiza imediatamente
+- [ ] SpendResources() → UI diminui valores
+
+### 28.3 Button HUD (Comandos - Futuro)
+
+**CommandController:**
+- [ ] `selectionManager` ligado
+- [ ] Selecionar unidades → OrderMove() funciona
+- [ ] Right-click no mundo → Unidades movem
+- [ ] Hotkey "S" → Unidades param (Hold)
+
+**UnitActionButtons:**
+- [ ] Botões ligados (moveButton, attackButton, etc)
+- [ ] Nenhuma seleção → Botões desabilitados
+- [ ] Selecionar unidade → Botões habilitados
+- [ ] Clicar botão → Comando executado
+
+**GroupHotkeyManager:**
+- [ ] Ctrl+2 → Cria grupo (ou atualiza)
+- [ ] 2 → Seleciona grupo
+- [ ] Duplo 2 → Centraliza câmera no grupo (futuro)
+
+### 28.4 Minimapa
+
+**MinimapController:**
+- [ ] Refs ligadas (minimapImage, iconsRoot, iconPrefab, minimapCamera, rtsCamera, factionDb)
+- [ ] Play → Ícones aparecem para unidades existentes
+- [ ] Spawnar unidade → Ícone aparece
+- [ ] Despawnar unidade → Ícone desaparece
+- [ ] Ícones têm cores corretas (baseado em facção)
+- [ ] Click no minimapa → Câmera move para posição
+- [ ] Scroll no minimapa → Zoom funciona
+- [ ] Botões +/- → Zoom funciona
+- [ ] `followMainView = true` → Minimapa segue câmera principal
+
+**DisableMinimapShadows:**
+- [ ] `minimapCamera` ligado
+- [ ] Play → Minimapa sem sombras (performance melhor)
+
+### 28.5 Integração
+
+**GameEvents:**
+- [ ] `OnTimeOfDay` disparado (todo frame)
+- [ ] `OnDayChanged` disparado (ao virar dia)
+- [ ] `OnClockChanged` disparado (a cada minuto)
+- [ ] `OnUnitSpawned` disparado (ao spawnar)
+- [ ] `OnUnitDespawned` disparado (ao despawnar)
+- [ ] `OnSelectionChanged` disparado (ao mudar seleção)
+
+**FactionDatabase:**
+- [ ] ScriptableObject criado
+- [ ] Facções configuradas (cor, ícone)
+- [ ] Minimapa usa cores corretas
+
+---
+
+## 29) MELHORIAS SUGERIDAS
+
+### 29.1 Melhorias de UX
+
+#### 1. Animação de Transição de Painéis
+
+```csharp
+/// <summary>
+/// Anima abertura/fechamento de painel (Ranking/Chat).
+/// </summary>
+public class PanelAnimator : MonoBehaviour
+{
+    [SerializeField] private CanvasGroup canvasGroup;
+    [SerializeField] private RectTransform panel;
+    [SerializeField] private float duration = 0.3f;
+    
+    public void Show()
+    {
+        gameObject.SetActive(true);
+        
+        // Fade in
+        canvasGroup.alpha = 0f;
+        canvasGroup.DOFade(1f, duration);
+        
+        // Scale in
+        panel.localScale = Vector3.one * 0.8f;
+        panel.DOScale(1f, duration).SetEase(Ease.OutBack);
+    }
+    
+    public void Hide()
+    {
+        // Fade out
+        canvasGroup.DOFade(0f, duration).OnComplete(() => {
+            gameObject.SetActive(false);
+        });
+        
+        // Scale out
+        panel.DOScale(0.8f, duration).SetEase(Ease.InBack);
+    }
+}
+```
+
+#### 2. Tooltip System
+
+```csharp
+/// <summary>
+/// Sistema de tooltips (ao hover em botões/recursos).
+/// </summary>
+public class TooltipTrigger : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
+{
+    [SerializeField] private string tooltipText;
+    [SerializeField] private float delay = 0.5f;
+    
+    private Coroutine _showCoroutine;
+    
+    public void OnPointerEnter(PointerEventData eventData)
+    {
+        _showCoroutine = StartCoroutine(ShowTooltipDelayed());
+    }
+    
+    public void OnPointerExit(PointerEventData eventData)
+    {
+        if (_showCoroutine != null)
+        {
+            StopCoroutine(_showCoroutine);
+            _showCoroutine = null;
+        }
+        
+        TooltipManager.Instance.Hide();
+    }
+    
+    IEnumerator ShowTooltipDelayed()
+    {
+        yield return new WaitForSeconds(delay);
+        TooltipManager.Instance.Show(tooltipText, Input.mousePosition);
+    }
+}
+```
+
+#### 3. Notificações (Toasts)
+
+```csharp
+/// <summary>
+/// Sistema de notificações temporárias.
+/// </summary>
+public class NotificationManager : MonoBehaviour
+{
+    [SerializeField] private NotificationUI notificationPrefab;
+    [SerializeField] private Transform container;
+    
+    public void ShowNotification(string text, NotificationType type)
+    {
+        var notif = Instantiate(notificationPrefab, container);
+        notif.SetData(text, type);
+        notif.Show();
+    }
+}
+
+public enum NotificationType
+{
+    Info,
+    Success,
+    Warning,
+    Error
+}
+```
+
+### 29.2 Melhorias de Performance
+
+#### 1. Frustum Culling de Ícones
+
+```csharp
+/// <summary>
+/// Culling de ícones baseado em frustum da câmera do minimapa.
+/// Mais preciso que culling por UV.
+/// </summary>
+void UpdateIcons()
+{
+    var planes = GeometryUtility.CalculateFrustumPlanes(minimapCamera);
+    
+    foreach (var kv in _icons)
+    {
+        var u = kv.Key;
+        var rt = kv.Value;
+        
+        // Testar se está dentro do frustum
+        bool visible = GeometryUtility.TestPlanesAABB(planes, u.bounds);
+        
+        rt.gameObject.SetActive(visible);
+        
+        if (visible)
+        {
+            // Atualizar posição
+            // ...
+        }
+    }
+}
+```
+
+#### 2. Update Throttling
+
+```csharp
+/// <summary>
+/// Atualizar ícones a cada N frames (ao invés de todo frame).
+/// </summary>
+[Header("Performance")]
+[SerializeField] private int updateEveryNFrames = 2;
+private int _frameCounter = 0;
+
+void Update()
+{
+    _frameCounter++;
+    
+    if (_frameCounter % updateEveryNFrames == 0)
+    {
+        UpdateIcons();
+    }
+    
+    // Outros updates sempre rodam
+    if (followMainView && mainCamera != null)
+    {
+        // ...
+    }
+}
+```
+
+#### 3. Dirty Flag Pattern
+
+```csharp
+/// <summary>
+/// Só atualizar ClockUI quando valores mudarem.
+/// </summary>
+public class ClockUI : MonoBehaviour
+{
+    private int _cachedDay, _cachedHour, _cachedMinute;
+    private bool _isDirty = false;
+    
+    public void UpdateClock(int day, int hour, int minute)
+    {
+        if (_cachedDay != day || _cachedHour != hour || _cachedMinute != minute)
+        {
+            _cachedDay = day;
+            _cachedHour = hour;
+            _cachedMinute = minute;
+            _isDirty = true;
+        }
+    }
+    
+    void Update()
+    {
+        if (_isDirty)
+        {
+            RenderClock();
+            _isDirty = false;
+        }
+    }
+    
+    void RenderClock()
+    {
+        clockText.text = $"Time {_cachedHour:00}:{_cachedMinute:00}";
+        dayText.text = $"Day {_cachedDay}";
+    }
+}
+```
+
+### 29.3 Melhorias de Qualidade de Código
+
+#### 1. Validator Pattern
+
+```csharp
+/// <summary>
+/// Validar refs no Inspector (evita nulls em runtime).
+/// </summary>
+public class MinimapController : MonoBehaviour
+{
+    void OnValidate()
+    {
+        ValidateReferences();
+    }
+    
+    void ValidateReferences()
+    {
+        if (minimapCamera == null)
+            Debug.LogWarning("[MinimapController] minimapCamera is not assigned!", this);
+        
+        if (iconPrefab == null)
+            Debug.LogWarning("[MinimapController] iconPrefab is not assigned!", this);
+        
+        if (iconsRoot == null)
+            Debug.LogWarning("[MinimapController] iconsRoot is not assigned!", this);
+        
+        // ... outras validações
+    }
+}
+```
+
+#### 2. Builder Pattern (Commands)
+
+```csharp
+/// <summary>
+/// Builder para comandos complexos.
+/// </summary>
+public class CommandBuilder
+{
+    private List<ICommand> _commands = new();
+    
+    public CommandBuilder Move(Vector3 position)
+    {
+        _commands.Add(new MoveCommand { TargetPosition = position });
+        return this;
+    }
+    
+    public CommandBuilder Attack(Unit target)
+    {
+        _commands.Add(new AttackCommand { TargetUnit = target });
+        return this;
+    }
+    
+    public CommandBuilder Hold()
+    {
+        _commands.Add(new HoldCommand());
+        return this;
+    }
+    
+    public CompositeCommand Build()
+    {
+        return new CompositeCommand(_commands);
+    }
+}
+
+// Uso:
+var command = new CommandBuilder()
+    .Move(targetPosition)
+    .Attack(enemy)
+    .Hold()
+    .Build();
+
+commandController.ExecuteCommand(command);
+```
+
+#### 3. Object Pool Genérico
+
+```csharp
+/// <summary>
+/// Pool genérico reutilizável.
+/// </summary>
+public class ObjectPool<T> where T : Component
+{
+    private readonly T _prefab;
+    private readonly Transform _parent;
+    private readonly Stack<T> _pool = new();
+    
+    public ObjectPool(T prefab, Transform parent)
+    {
+        _prefab = prefab;
+        _parent = parent;
+    }
+    
+    public T Get()
+    {
+        T obj;
+        
+        if (_pool.Count > 0)
+        {
+            obj = _pool.Pop();
+        }
+        else
+        {
+            obj = Object.Instantiate(_prefab, _parent);
+        }
+        
+        obj.gameObject.SetActive(true);
+        return obj;
+    }
+    
+    public void Return(T obj)
+    {
+        obj.gameObject.SetActive(false);
+        _pool.Push(obj);
+    }
+}
+
+// Uso no MinimapController:
+private ObjectPool<RectTransform> _iconPool;
+
+void Awake()
+{
+    _iconPool = new ObjectPool<RectTransform>(iconPrefab, iconsRoot);
+}
+
+RectTransform GetIcon() => _iconPool.Get();
+void ReturnIcon(RectTransform rt) => _iconPool.Return(rt);
+```
+
+---
+
+**FIM DO LOTE 5 (PARTE 2) - TOP HUD, BUTTON HUD & MINIMAPA (DOCUMENTAÇÃO COMPLETA)**
+
+---
 
 **Documento mantido por:** Equipe de Desenvolvimento  
 **Última atualização:** Outubro 2025  
-**Versão:** 2.1 (Pós-Refatoração Event Bus)  
+**Versão:** 2.1 (Híbrida: Código Real + Arquitetura Futura)  
+**Website:** https://luciano-claudio.github.io/MedievalThrones  
 
 ---
+
+
 
 
 
