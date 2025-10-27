@@ -2,23 +2,45 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.EventSystems;
 
+/// <summary>
+/// Tradutor de Input System para RTSCameraCinemachineV3Controller.
+/// Lê ações configuradas e repassa para o controlador via TickInput.
+/// Refatoração: pequenos ajustes de documentação e organização.
+/// </summary>
 [RequireComponent(typeof(RTSCameraCinemachineV3Controller))]
 public class RTSCameraInputSystem : MonoBehaviour
 {
     [Header("Action References (arraste do .inputactions)")]
-    public InputActionReference move;            // Vector2 (WASD - 2D Vector)
-    public InputActionReference rotate;          // 1D Axis (Q/E)
-    public InputActionReference zoom;            // Axis (Mouse scroll Y)
-    public InputActionReference pointerPos;      // Vector2 (Mouse position)
-    public InputActionReference pointerDelta;    // Vector2 (Mouse delta)
-    public InputActionReference middleButton;    // Button (Mouse middle)
+    [Tooltip("Movimento WASD (Vector2 - 2D Vector)")]
+    public InputActionReference move;
 
-    RTSCameraCinemachineV3Controller _cam;
-    bool _middleHeld;
+    [Tooltip("Rotação Q/E (1D Axis)")]
+    public InputActionReference rotate;
+
+    [Tooltip("Zoom com scroll do mouse (Axis)")]
+    public InputActionReference zoom;
+
+    [Tooltip("Posição do ponteiro na tela (Vector2)")]
+    public InputActionReference pointerPos;
+
+    [Tooltip("Delta de movimento do ponteiro (Vector2)")]
+    public InputActionReference pointerDelta;
+
+    [Tooltip("Botão do meio do mouse (Button)")]
+    public InputActionReference middleButton;
+
+    private RTSCameraCinemachineV3Controller _cam;
+    private bool _middleHeld;
 
     void Awake()
     {
         _cam = GetComponent<RTSCameraCinemachineV3Controller>();
+
+        if (_cam == null)
+        {
+            Debug.LogError($"[RTSCameraInput] Componente RTSCameraCinemachineV3Controller " +
+                          $"não encontrado em {gameObject.name}!", this);
+        }
     }
 
     void OnEnable()
@@ -30,14 +52,20 @@ public class RTSCameraInputSystem : MonoBehaviour
         Enable(pointerDelta);
         Enable(middleButton);
 
-        if (middleButton) middleButton.action.performed += OnMiddle;
-        if (middleButton) middleButton.action.canceled += OnMiddle;
+        if (middleButton?.action != null)
+        {
+            middleButton.action.performed += OnMiddle;
+            middleButton.action.canceled += OnMiddle;
+        }
     }
 
     void OnDisable()
     {
-        if (middleButton) middleButton.action.performed -= OnMiddle;
-        if (middleButton) middleButton.action.canceled -= OnMiddle;
+        if (middleButton?.action != null)
+        {
+            middleButton.action.performed -= OnMiddle;
+            middleButton.action.canceled -= OnMiddle;
+        }
 
         Disable(move);
         Disable(rotate);
@@ -54,16 +82,20 @@ public class RTSCameraInputSystem : MonoBehaviour
 
     void Update()
     {
+        if (_cam == null) return;
+
+        // Ler inputs
         Vector2 wasd = Read(move);
-        float rot = Read(rotate, true);
-        float zm = Read(zoom, true);
+        float rot = ReadFloat(rotate);
+        float zm = ReadFloat(zoom);
         Vector2 pos = Read(pointerPos);
         Vector2 del = _middleHeld ? Read(pointerDelta) : Vector2.zero;
 
-        bool overUI = false;
-        if (EventSystem.current != null)
-            overUI = EventSystem.current.IsPointerOverGameObject();
+        // Detectar se o ponteiro está sobre UI
+        bool overUI = EventSystem.current != null
+                      && EventSystem.current.IsPointerOverGameObject();
 
+        // Repassar para o controlador
         _cam.TickInput(
             wasdMove: wasd,
             pointerPosition: pos,
@@ -75,9 +107,27 @@ public class RTSCameraInputSystem : MonoBehaviour
         );
     }
 
-    // helpers
-    static void Enable(InputActionReference r) { if (r && r.action != null) r.action.Enable(); }
-    static void Disable(InputActionReference r) { if (r && r.action != null) r.action.Disable(); }
-    static Vector2 Read(InputActionReference r) { return (r && r.action != null) ? r.action.ReadValue<Vector2>() : Vector2.zero; }
-    static float Read(InputActionReference r, bool _ = true) { return (r && r.action != null) ? r.action.ReadValue<float>() : 0f; }
+    // ==================== HELPERS ====================
+
+    static void Enable(InputActionReference r)
+    {
+        if (r?.action != null)
+            r.action.Enable();
+    }
+
+    static void Disable(InputActionReference r)
+    {
+        if (r?.action != null)
+            r.action.Disable();
+    }
+
+    static Vector2 Read(InputActionReference r)
+    {
+        return (r?.action != null) ? r.action.ReadValue<Vector2>() : Vector2.zero;
+    }
+
+    static float ReadFloat(InputActionReference r)
+    {
+        return (r?.action != null) ? r.action.ReadValue<float>() : 0f;
+    }
 }

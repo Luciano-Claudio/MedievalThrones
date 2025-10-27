@@ -54,9 +54,9 @@ public class MinimapController : MonoBehaviour, IPointerClickHandler, IScrollHan
 
     void OnEnable()
     {
-        // assina eventos (se quiser atualizar incrementalmente)
-        UnitRegistry.OnUnitSpawned += HandleSpawn;
-        UnitRegistry.OnUnitDespawned += HandleDespawn;
+        // REFATORAÇÃO: Usar GameEvents em vez de UnitRegistry
+        GameEvents.OnUnitSpawned += HandleSpawn;
+        GameEvents.OnUnitDespawned += HandleDespawn;
 
         RebuildAll();
         SyncMinimapCamera();
@@ -64,8 +64,9 @@ public class MinimapController : MonoBehaviour, IPointerClickHandler, IScrollHan
 
     void OnDisable()
     {
-        UnitRegistry.OnUnitSpawned -= HandleSpawn;
-        UnitRegistry.OnUnitDespawned -= HandleDespawn;
+        // REFATORAÇÃO: Desinscrever do GameEvents
+        GameEvents.OnUnitSpawned -= HandleSpawn;
+        GameEvents.OnUnitDespawned -= HandleDespawn;
         ClearAll();
     }
 
@@ -77,7 +78,7 @@ public class MinimapController : MonoBehaviour, IPointerClickHandler, IScrollHan
             {
                 boundsCenter = c; // só o centro
                                   // o tamanho agora vem do nosso zoom, não da câmera principal
-                float worldHeight = Mathf.Max(5f, baseWorldHeight * zoom); // eixo Z “vertical” do minimapa
+                float worldHeight = Mathf.Max(5f, baseWorldHeight * zoom); // eixo Z "vertical" do minimapa
                 float aspect = (float)minimapCamera.pixelWidth / Mathf.Max(1, minimapCamera.pixelHeight);
                 float worldWidth = worldHeight * aspect; // eixo X visto pela câmera
 
@@ -251,7 +252,7 @@ public class MinimapController : MonoBehaviour, IPointerClickHandler, IScrollHan
         SyncMinimapCamera();
     }
 
-    // --- Ajusta a MinimapCamera para “enquadrar” o mapa ---
+    // --- Ajusta a MinimapCamera para "enquadrar" o mapa ---
     void SyncMinimapCamera()
     {
         if (!minimapCamera) return;

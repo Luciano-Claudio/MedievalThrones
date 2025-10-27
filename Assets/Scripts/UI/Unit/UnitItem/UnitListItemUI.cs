@@ -30,25 +30,47 @@ public class UnitListItemUI : MonoBehaviour
 
     public void Bind(Unit unit)
     {
-        if (_unit != null) _unit.OnProgressChanged -= OnUnitProgressChanged;
+        // REFATORAÇÃO: Desinscrever do evento antigo (local)
+        // if (_unit != null) _unit.OnProgressChanged -= OnUnitProgressChanged;  // EVENTO LOCAL REMOVIDO
+
+        // Desinscrever do GameEvents se já estava inscrito
+        if (_unit != null)
+        {
+            GameEvents.OnUnitProgressChanged -= OnUnitProgressChanged;
+        }
+
         _unit = unit;
 
         if (nameText) nameText.text = unit.DisplayName;
         if (portrait) portrait.sprite = unit.def ? unit.def.icon : null;
 
         Refresh();
-        _unit.OnProgressChanged += OnUnitProgressChanged;
+
+        // REFATORAÇÃO: Inscrever no GameEvents em vez do evento local
+        GameEvents.OnUnitProgressChanged += OnUnitProgressChanged;
     }
 
     public void Unbind()
     {
-        if (_unit != null) _unit.OnProgressChanged -= OnUnitProgressChanged;
+        // REFATORAÇÃO: Desinscrever do GameEvents em vez do evento local
+        if (_unit != null)
+        {
+            GameEvents.OnUnitProgressChanged -= OnUnitProgressChanged;
+        }
         _unit = null;
     }
 
     void OnDisable() => Unbind();
 
-    void OnUnitProgressChanged(Unit _) => Refresh();
+    // REFATORAÇÃO: Handler agora recebe Unit como parâmetro do GameEvents
+    void OnUnitProgressChanged(Unit changedUnit)
+    {
+        // Só atualizar se for a unidade vinculada a este UI
+        if (changedUnit == _unit)
+        {
+            Refresh();
+        }
+    }
 
     public void RefreshNow() => Refresh();
 

@@ -4,8 +4,9 @@ using UnityEngine;
 
 public static class UnitRegistry
 {
-    public static event Action<Unit> OnUnitSpawned;
-    public static event Action<Unit> OnUnitDespawned;
+    // REFATORAÇÃO: Eventos estáticos removidos, agora usa GameEvents
+    // public static event Action<Unit> OnUnitSpawned;    // REMOVIDO
+    // public static event Action<Unit> OnUnitDespawned;  // REMOVIDO
 
     static readonly List<Unit> _all = new();
     static readonly Dictionary<FactionId, List<Unit>> _perFaction = new();
@@ -25,7 +26,9 @@ public static class UnitRegistry
                 _perFaction[u.owner] = list;
             }
             list.Add(u);
-            OnUnitSpawned?.Invoke(u);
+
+            // REFATORAÇÃO: Usar GameEvents em vez de evento estático local
+            GameEvents.RaiseUnitSpawned(u);
         }
     }
 
@@ -34,8 +37,9 @@ public static class UnitRegistry
         if (_all.Remove(u))
         {
             if (_perFaction.TryGetValue(u.owner, out var list)) list.Remove(u);
-            OnUnitDespawned?.Invoke(u);
+
+            // REFATORAÇÃO: Usar GameEvents em vez de evento estático local
+            GameEvents.RaiseUnitDespawned(u);
         }
     }
-
 }

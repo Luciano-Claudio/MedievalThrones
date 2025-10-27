@@ -50,20 +50,119 @@ public class UnitListPanel : MonoBehaviour
             if (found) dragRoot = found.transform as RectTransform;
         }
     }
-
     void OnEnable()
     {
         InitializeOrderFromRegistry();
 
         Build();
-        if (selection != null)
-            selection.OnSelectionChanged += RefreshFromSelection;
-    }
 
+        // REFATORAÇÃO (Lote 5): Subscrever eventos globais
+        GameEvents.OnSelectionChanged += RefreshFromSelection;
+        GameEvents.OnUnitSpawned += HandleUnitSpawned;
+        GameEvents.OnUnitDespawned += HandleUnitDespawned;
+    }
     void OnDisable()
     {
-        if (selection != null)
-            selection.OnSelectionChanged -= RefreshFromSelection;
+        // REFATORAÇÃO (Lote 5): Desinscrever eventos globais
+        GameEvents.OnSelectionChanged -= RefreshFromSelection;
+        GameEvents.OnUnitSpawned -= HandleUnitSpawned;
+        GameEvents.OnUnitDespawned -= HandleUnitDespawned;
+    }
+
+    // ==================== SINCRONIZAÇÃO DE SPAWN/DESPAWN (NOVO - Lote 5) ====================
+
+    /// <summary>
+    /// Handler para quando uma unidade spawna na cena.
+    /// Adiciona a unidade automaticamente à lista (na raiz, fora de grupos).
+    /// </summary>
+    void HandleUnitSpawned(Unit unit)
+    {
+        if (unit == null || unit.owner != player.myFaction) return;
+
+        // Verificar se a unidade já está na lista (evitar duplicatas)
+        bool alreadyExists = _order.Any(w => !w.IsGroup && w.GetUnit() == unit);
+        if (alreadyExists) return;
+
+        // Adicionar a unidade ao modelo de dados
+        var newWrapper = new ListItemWrapper(unit);
+        _order.Add(newWrapper);
+        int modelIndex = _order.Count - 1;
+
+        // ✅ CORREÇÃO: Instancia APENAS o novo item (sem Build completo)
+        bool reverse = false;
+        var vlg = content ? content.GetComponent<VerticalLayoutGroup>() : null;
+        if (vlg) reverse = vlg.reverseArrangement;
+
+        int desiredSibling = reverse ? (_order.Count - 1 - modelIndex) : modelIndex;
+
+        var ui = Instantiate(itemPrefab, content);
+        ui.transform.SetSiblingIndex(desiredSibling);
+
+        var markerU = ui.gameObject.AddComponent<ListItemMarker>();
+        markerU.Wrapper = newWrapper;
+
+        ui.Bind(unit);
+
+        var handle = ui.GetComponent<UnitListItemHandle>();
+        if (handle) handle.Setup(this, inputSel, selection, modelIndex, unit);
+
+        var rei = ui.GetComponent<ReorderableListItem>();
+        if (rei)
+        {
+            rei.Inject(content, dragRoot, _canvas, scroll, scroll.viewport, this);
+            _items.Add(rei);
+        }
+
+        // Atualiza índices sem rebuild completo
+        RefreshItemIndices();
+        RefreshFromSelection(selection?.Selection);
+    }
+
+    // ==================== SINCRONIZAÇÃO DE SPAWN/DESPAWN (NOVO - Lote 5) ====================
+
+    /// <summary>
+    /// Handler para quando uma unidade é removida da cena (despawn/morte).
+    /// Remove a unidade da lista e de qualquer grupo que a contenha.
+    /// </summary>
+    void HandleUnitDespawned(Unit unit)
+    {
+        if (unit == null) return;
+
+        bool changed = false;
+
+        // Remover da raiz (se estiver)
+        int removed = _order.RemoveAll(w => !w.IsGroup && w.GetUnit() == unit);
+        if (removed > 0) changed = true;
+
+        // Remover de grupos (se estiver)
+        List<UnitGroup> affectedGroups = new List<UnitGroup>();
+        foreach (var gw in _order.Where(w => w.IsGroup))
+        {
+            var g = (UnitGroup)gw.Model;
+            if (g.Units.Remove(unit))
+            {
+                changed = true;
+                affectedGroups.Add(g);
+            }
+        }
+
+        // Se houve mudanças, reconstruir apenas os grupos afetados
+        if (changed)
+        {
+            if (affectedGroups.Count > 0)
+            {
+                // Reconstruir apenas grupos afetados (mais eficiente)
+                foreach (var group in affectedGroups)
+                {
+                    RebuildOnlyGroup(group);
+                }
+            }
+            else
+            {
+                // Se removido da raiz, reconstruir tudo
+                Build();
+            }
+        }
     }
 
     /// <summary>Popula a ordem inicial com as Units da cena se a lista estiver vazia.</summary>
@@ -179,9 +278,14 @@ public class UnitListPanel : MonoBehaviour
     }
 
     // ------------------------------------------------------------------
-    // GRUPOS
+    // GRUPOS (REFATORADO - Lote 5)
     // ------------------------------------------------------------------
-    /// <summary>Chamado pelo CreateGroupUI.</summary>
+
+    /// <summary>
+    /// Cria um novo grupo vazio e adiciona à lista.
+    /// REFATORADO (Lote 5): Dispara evento global, mas mantém grupo vazio.
+    /// Usuário deve arrastar unidades para o grupo via drag-and-drop.
+    /// </summary>
     public void CreateNewGroup(string groupName)
     {
         // 1) cria o modelo
@@ -235,6 +339,89 @@ public class UnitListPanel : MonoBehaviour
         // 5) indices/seleção (sem rebuild da lista toda)
         RefreshItemIndices();
         RefreshFromSelection(selection?.Selection);
+
+        // REFATORAÇÃO (Lote 5): Disparar evento global de criação de grupo
+        GameEvents.RaiseGroupCreated(newGroup);
+    }
+
+    /// <summary>
+    /// Deleta um grupo e restaura suas unidades à raiz da lista.
+    /// REFATORADO (Lote 5): Dispara evento global de deleção de grupo.
+    /// </summary>
+    public void DeleteGroupAndRestoreUnits(UnitGroup group, List<Unit> unitsToRestore)
+    {
+        if (group == null || unitsToRestore == null || _order == null) return;
+
+        var wrapperToRemove = _order.FirstOrDefault(w => w.Model == group);
+        if (wrapperToRemove == null) return;
+
+        int groupIndex = _order.IndexOf(wrapperToRemove);
+        if (groupIndex < 0) return;
+
+        // 1. Remove o grupo da lista principal
+        _order.RemoveAt(groupIndex);
+
+        // 2. Insere cada unidade de volta na posição onde o grupo estava
+        unitsToRestore.Reverse();
+
+        foreach (var unit in unitsToRestore)
+        {
+            var newWrapper = new ListItemWrapper(unit);
+            _order.Insert(groupIndex, newWrapper);
+        }
+
+        // 3. ✅ CORREÇÃO: Instancia APENAS os itens restaurados (sem Build completo)
+
+        bool reverse = false;
+        var vlg = content ? content.GetComponent<VerticalLayoutGroup>() : null;
+        if (vlg) reverse = vlg.reverseArrangement;
+
+        // Encontrar GameObject do grupo para remover
+        Transform groupTransform = FindRootChildForWrapper(wrapperToRemove);
+        int visualIndex = groupTransform != null ? groupTransform.GetSiblingIndex() : groupIndex;
+
+        // Destruir APENAS o GameObject do grupo
+        if (groupTransform != null)
+        {
+            var rei = groupTransform.GetComponent<ReorderableListItem>();
+            if (rei) _items.Remove(rei);
+            DestroyImmediate(groupTransform.gameObject);
+        }
+
+        // Instanciar units restauradas
+        int insertOffset = 0;
+        foreach (var unit in unitsToRestore)
+        {
+            int itemModelIndex = groupIndex + insertOffset;
+            int targetSibling = reverse ? (_order.Count - 1 - itemModelIndex) : (visualIndex + insertOffset);
+
+            var ui = Instantiate(itemPrefab, content);
+            ui.transform.SetSiblingIndex(targetSibling);
+
+            var markerU = ui.gameObject.AddComponent<ListItemMarker>();
+            markerU.Wrapper = _order[itemModelIndex];
+
+            ui.Bind(unit);
+
+            var handle = ui.GetComponent<UnitListItemHandle>();
+            if (handle) handle.Setup(this, inputSel, selection, itemModelIndex, unit);
+
+            var rei = ui.GetComponent<ReorderableListItem>();
+            if (rei)
+            {
+                rei.Inject(content, dragRoot, _canvas, scroll, scroll.viewport, this);
+                _items.Add(rei);
+            }
+
+            insertOffset++;
+        }
+
+        // Atualiza índices sem rebuild completo
+        RefreshItemIndices();
+        RefreshFromSelection(selection?.Selection);
+
+        // REFATORAÇÃO (Lote 5): Disparar evento global de deleção de grupo
+        GameEvents.RaiseGroupDeleted(group);
     }
 
 
@@ -746,36 +933,6 @@ public class UnitListPanel : MonoBehaviour
         // mantém expandido conforme modelo e força layout só deste trecho
         targetUI.RefreshChildrenOnly();
         LayoutRebuilder.ForceRebuildLayoutImmediate(targetUI.subContent);
-    }
-    public void DeleteGroupAndRestoreUnits(UnitGroup group, List<Unit> unitsToRestore)
-    {
-        if (group == null || unitsToRestore == null || _order == null) return;
-
-        var wrapperToRemove = _order.FirstOrDefault(w => w.Model == group);
-        if (wrapperToRemove == null) return;
-
-        int groupIndex = _order.IndexOf(wrapperToRemove);
-        if (groupIndex < 0) return;
-
-        // 1. Remove o grupo da lista principal
-        _order.RemoveAt(groupIndex);
-
-        // 2. Insere cada unidade de volta na posição onde o grupo estava (na lista principal)
-        // Insere na ordem inversa para manter a ordem original ao inserir no mesmo índice
-        unitsToRestore.Reverse();
-
-        foreach (var unit in unitsToRestore)
-        {
-            var newWrapper = new ListItemWrapper(unit);
-            // Insere na posição do grupo (a lista _order está agora 1 item menor)
-            _order.Insert(groupIndex, newWrapper);
-        }
-
-        // 3. Força o Rebuild da lista inteira
-        Build();
-
-        // Opcional: Limpar a seleção se o item deletado estava selecionado
-        RefreshFromSelection(selection?.Selection);
     }
 
 }
