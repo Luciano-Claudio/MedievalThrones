@@ -26,9 +26,9 @@ public class InputSelection : MonoBehaviour
     public event Action<Vector2> OnDragging;
     public event Action<Vector2> OnEndDrag;
 
-    public event Action<Unit, bool, bool> OnClickUnit;
+    public event Action<Unit, bool> OnClickUnit;
     public event Action<Unit> OnDoubleClickUnit;
-    public event Action<Vector3, bool, bool> OnClickGround;
+    public event Action<Vector3, bool> OnClickGround;
 
     public bool IsCtrlPressed => ctrl != null && ctrl.action.IsPressed();
     public bool IsShiftPressed => shift != null && shift.action.IsPressed();
@@ -131,7 +131,7 @@ public class InputSelection : MonoBehaviour
         if (IsPointerOverUI()) return;      // usa o cache -> some o warning
 
         if (picker != null && picker.TryPickGroundAt(_pointer, out var p, out _))
-            OnClickGround?.Invoke(p, false, false);
+            OnClickGround?.Invoke(p, false);
     }
 
 
@@ -154,13 +154,13 @@ public class InputSelection : MonoBehaviour
                 return;
             }
 
-            OnClickUnit?.Invoke(unit, isCtrl, isShift);
+            OnClickUnit?.Invoke(unit, isCtrl);
             _lastClickedUnit = unit;
             _lastClickTime = Time.unscaledTime;
         }
         else if (picker.TryPickGroundAt(screenPos, out var point, out _))
         {
-            OnClickGround?.Invoke(point, isCtrl, isShift);
+            OnClickGround?.Invoke(point, isCtrl);
             _lastClickedUnit = null;
             _lastClickTime = 0f;
         }

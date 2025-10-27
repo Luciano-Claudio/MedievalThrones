@@ -506,6 +506,7 @@ GameObject:
   - component: {fileID: 2537426219327556536}
   - component: {fileID: 1995281951297960902}
   - component: {fileID: 6805477300692696225}
+  - component: {fileID: 8462808631462187377}
   m_Layer: 5
   m_Name: Unit
   m_TagString: Untagged
@@ -639,7 +640,7 @@ MonoBehaviour:
   barFill: {fileID: 8045218370502965100}
   circleFill: {fileID: 4314591988609290907}
   outline: {fileID: 6969311745829977217}
-  debugXp01: 0
+  debugXp01: 0.152
 --- !u!114 &1995281951297960902
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -657,7 +658,6 @@ MonoBehaviour:
   canvasUI: {fileID: 0}
   scrollRect: {fileID: 0}
   viewport: {fileID: 0}
-  groupHoverDelay: 0.5
   edgeHotZonePx: 80
   maxScrollSpeedPxPerSec: 900
   dragDeadZonePx: 8
@@ -676,6 +676,21 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   doubleClickMaxDelay: 0.3
+--- !u!114 &8462808631462187377
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6025722707202731608}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2762503d208ba6646b47994e52278d68, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  contextMenuPrefab: {fileID: 4699132677110030451, guid: e1213356090df1645aa05d8d5844c86a, type: 3}
+  screenPadding: {x: -20, y: -20}
+  blockerColor: {r: 0, g: 0, b: 0, a: 0.001}
 --- !u!1 &6213944534633404579
 GameObject:
   m_ObjectHideFlags: 0
@@ -1070,7 +1085,7 @@ MonoBehaviour:
   m_PreserveAspect: 0
   m_FillCenter: 1
   m_FillMethod: 0
-  m_FillAmount: 0
+  m_FillAmount: 0.16888888
   m_FillClockwise: 1
   m_FillOrigin: 0
   m_UseSpriteMesh: 0

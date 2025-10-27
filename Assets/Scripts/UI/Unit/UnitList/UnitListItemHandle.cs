@@ -1,5 +1,7 @@
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.InputSystem;
+using UnityEngine.UI;
 
 public class UnitListItemHandle : MonoBehaviour, IPointerClickHandler
 {
@@ -8,6 +10,7 @@ public class UnitListItemHandle : MonoBehaviour, IPointerClickHandler
     SelectionManager _selection;
     int _index;
     Unit _unit;
+    UnitListItemContextMenu _contextMenu;
 
     [SerializeField] float doubleClickMaxDelay = 0.30f;
     float _lastClickTime = -10f;
@@ -25,6 +28,7 @@ public class UnitListItemHandle : MonoBehaviour, IPointerClickHandler
         _selection = selection;
         _index = index;
         _unit = unit;
+        _contextMenu = GetComponent<UnitListItemContextMenu>();
     }
 
     public void SetIndex(int index) => _index = index;
@@ -40,6 +44,12 @@ public class UnitListItemHandle : MonoBehaviour, IPointerClickHandler
         // Se este item representa um grupo, precisaremos de um tratamento de clique diferente.
         // Por enquanto, só processa se houver uma Unit.
         if (_panel == null || _unit == null) return;
+
+        if (eventData.button == PointerEventData.InputButton.Right)
+        {
+            // seleciona este item ANTES de abrir o menu
+            _contextMenu.ShowMenuAt(eventData.position, eventData.pressEventCamera);
+        }
 
         if (Time.frameCount == _suppressClickFrame)
         {
@@ -60,4 +70,18 @@ public class UnitListItemHandle : MonoBehaviour, IPointerClickHandler
         // Passa a Unit ligada para o painel resolver a seleção.
         _panel.OnItemClicked(unitToPass, ctrl, shift, isDoubleSameItem);
     }
+    /*public void OnPointerClick(PointerEventData e)
+    {
+        if (e.button == PointerEventData.InputButton.Right)
+        {
+            // seleciona este item ANTES de abrir o menu
+            SelectSelf();
+            ShowMenuAt(e.position, e.pressEventCamera);
+        }
+        else if (e.button == PointerEventData.InputButton.Left)
+        {
+            // left cancela/fecha o menu
+            CloseMenu();
+        }
+    }*/
 }

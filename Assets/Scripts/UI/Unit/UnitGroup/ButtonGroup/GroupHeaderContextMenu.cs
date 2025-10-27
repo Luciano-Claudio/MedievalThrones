@@ -2,10 +2,13 @@
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
+using UnityEngine.InputSystem;
 
 /// Coloque este componente no GameObject "Name" do seu Group.
-/// Ao clicar com o botão direito, instancia o prefab do menu na posição do mouse.
-/// Fecha ao clicar fora ou ao desabilitar o objeto.
+/// Comportamento:
+/// - Right click abre o popup no header.
+/// - Right click em outro header fecha o atual e abre no novo.
+/// - Left click fecha o popup.
 public class GroupHeaderContextMenu : MonoBehaviour, IPointerClickHandler
 {
     [Header("Prefab do menu (com os botões Rename/Delete)")]
@@ -25,11 +28,16 @@ public class GroupHeaderContextMenu : MonoBehaviour, IPointerClickHandler
     RectTransform _menu;
     GameObject _blocker;
 
-
     public void OnPointerClick(PointerEventData eventData)
     {
-        if (eventData.button != PointerEventData.InputButton.Right) return;
-        ShowMenuAt(eventData.position, eventData.pressEventCamera);
+        if (eventData.button == PointerEventData.InputButton.Right)
+        {
+            ShowMenuAt(eventData.position, eventData.pressEventCamera);
+        }
+        else if (eventData.button == PointerEventData.InputButton.Left)
+        {
+            CloseMenu();
+        }
     }
 
     void ShowMenuAt(Vector2 screenPos, Camera eventCam)
@@ -41,13 +49,19 @@ public class GroupHeaderContextMenu : MonoBehaviour, IPointerClickHandler
         var parent = uiRoot;
         if (parent == null)
         {
-            var cv = Rei.Canvas;
+            var cv = Rei != null ? Rei.Canvas : null;
             if (cv != null) parent = cv.transform as RectTransform;
+        }
+        if (parent == null)
+        {
+            var any = GetComponentInParent<Canvas>();
+            if (any) parent = any.transform as RectTransform;
         }
         if (parent == null) return;
 
-        // 1) Cria blocker
-        _blocker = new GameObject("ContextMenuBlocker", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
+        // 1) Blocker customizado (diferencia left/right e reenvia o right)
+        _blocker = new GameObject("GroupContextMenuBlocker",
+            typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(BlockerInputCatcher));
         var brt = (RectTransform)_blocker.transform;
         brt.SetParent(parent, false);
         brt.anchorMin = Vector2.zero;
@@ -59,66 +73,44 @@ public class GroupHeaderContextMenu : MonoBehaviour, IPointerClickHandler
         var bImg = _blocker.GetComponent<Image>();
         bImg.color = blockerColor;
 
-        var bBtn = _blocker.GetComponent<Button>();
-        bBtn.transition = Selectable.Transition.None;
-        bBtn.onClick.AddListener(CloseMenu);
+        var catcher = _blocker.GetComponent<BlockerInputCatcher>();
+        catcher.onLeftClick = CloseMenu;
+        catcher.onRightClick = () =>
+        {
+            CloseMenu();
+            ForwardRightClickToAnyContextTarget();
+        };
 
-        // 2) Cria o menu por cima do blocker
+        // 2) Menu
         _menu = Instantiate(contextMenuPrefab, parent);
         _menu.gameObject.SetActive(true);
         _menu.SetAsLastSibling();
 
         var groupUI = GetComponentInParent<GroupListItemUI>();
-        if (groupUI == null) { CloseMenu(); return; }
+        var rootPanel = groupUI != null ? groupUI.GetComponentInParent<UnitListPanel>() : null;
+        if (groupUI == null || rootPanel == null) { CloseMenu(); return; }
 
-        var rootPanel = groupUI.GetComponentInParent<UnitListPanel>();
-        if (rootPanel == null) { CloseMenu(); return; }
-
-        // 3) Posição: converte screen → local no parent
+        // 3) Posiciona canto superior esquerdo no mouse
         RectTransformUtility.ScreenPointToLocalPointInRectangle(parent, screenPos, eventCam, out var local);
         _menu.anchoredPosition = local;
-
-        // 4) Rebuild para obter o tamanho final do menu
         LayoutRebuilder.ForceRebuildLayoutImmediate(_menu);
-
-        // 5) CORREÇÃO CRÍTICA: Ajusta a posição para que o VÉRTICE SUPERIOR ESQUERDO fique no mouse.
-        // O pivot do seu menu (assumimos 0.5, 0.5) é o ponto de ancoragem.
-        // Se queremos o canto superior esquerdo (pivot 0, 1) na posição do mouse,
-        // precisamos compensar pela distância do pivot ao canto superior esquerdo (em coordenadas de pivot).
 
         var size = _menu.rect.size;
         var pivot = _menu.pivot;
+        var pos = _menu.anchoredPosition;
+        pos.x -= size.x * pivot.x;          // esquerda no mouse
+        pos.y += size.y * (1f - pivot.y);   // topo    no mouse
+        _menu.anchoredPosition = pos;
 
-        // Deslocamento necessário:
-        // X: move o menu para a direita pela distância entre a âncora (pos.x) e a borda esquerda (pos.x - size.x * pivot.x)
-        // Y: move o menu para baixo pela distância entre a âncora (pos.y) e a borda superior (pos.y + size.y * (1 - pivot.y))
-
-        // Se o pivot do menu for (0.5, 0.5):
-        // X compensa por + size.x * 0.5
-        // Y compensa por - size.y * 0.5
-
-        var compensatedPosition = _menu.anchoredPosition;
-
-        // O ponto de ancoragem é o pivot.
-        // Queremos que o ponto (0, 1) do menu esteja em 'local'.
-
-        // Deslocamento X: Distância do PIVOT (ex: 0.5) até a borda esquerda (0)
-        compensatedPosition.x -= size.x * pivot.x;
-        // Deslocamento Y: Distância do PIVOT (ex: 0.5) até a borda superior (1)
-        compensatedPosition.y += size.y * (1f - pivot.y);
-
-        _menu.anchoredPosition = compensatedPosition;
-
+        // 4) Setup do handler do menu
         var handler = _menu.GetComponent<GroupContextMenuHandler>();
         if (handler)
         {
-            // O GroupListItemUI deve ter a referência ao TextMeshPro do Name
             TMP_Text headerText = groupUI.nameText;
-
             handler.Setup(rootPanel, groupUI.GroupModel, headerText, this);
         }
 
-        // 6) Rebuild e clamp dentro do parent (usa o ClampToParent ajustado)
+        // 5) Clamp
         ClampToParent(parent, _menu);
     }
 
@@ -126,54 +118,53 @@ public class GroupHeaderContextMenu : MonoBehaviour, IPointerClickHandler
     {
         var pr = parent.rect;
         var m = menu.rect;
-
-        // O Clamp agora usa o ponto EXATO de canto do menu (que já foi ajustado)
-        // O canto superior esquerdo é o ponto (X_local, Y_local) do menu,
-        // E precisamos garantir que o canto superior esquerdo esteja DENTRO do pr.
-
         var pos = menu.anchoredPosition;
-        var pivot = menu.pivot;
+        var pv = menu.pivot;
 
-        // Borda esquerda do menu no espaço local (X da âncora - offset do pivot)
-        float menuLeft = pos.x - m.width * pivot.x;
-        // Borda superior do menu no espaço local (Y da âncora + offset do pivot)
-        float menuTop = pos.y + m.height * (1f - pivot.y);
+        float left = pos.x - m.width * pv.x;
+        float top = pos.y + m.height * (1f - pv.y);
 
-        // Clamping X: Se a borda esquerda (menuLeft) for menor que o limite (pr.xMin + padding)
-        if (menuLeft < pr.xMin + screenPadding.x)
-        {
-            // Move o menu para a direita
-            pos.x += (pr.xMin + screenPadding.x) - menuLeft;
-        }
-        else if (menuLeft + m.width > pr.xMax - screenPadding.x)
-        {
-            // Se a borda direita (menuLeft + width) for maior que o limite
-            // Move o menu para a esquerda
-            pos.x -= (menuLeft + m.width) - (pr.xMax - screenPadding.x);
-        }
+        if (left < pr.xMin + screenPadding.x)
+            pos.x += (pr.xMin + screenPadding.x) - left;
+        else if (left + m.width > pr.xMax - screenPadding.x)
+            pos.x -= (left + m.width) - (pr.xMax - screenPadding.x);
 
-        // Clamping Y: Se a borda superior (menuTop) for maior que o limite (pr.yMax - padding)
-        if (menuTop > pr.yMax - screenPadding.y)
-        {
-            // Move o menu para baixo
-            pos.y -= menuTop - (pr.yMax - screenPadding.y);
-        }
-        else if (menuTop - m.height < pr.yMin + screenPadding.y)
-        {
-            // Se a borda inferior (menuTop - height) for menor que o limite
-            // Move o menu para cima
-            pos.y += (pr.yMin + screenPadding.y) - (menuTop - m.height);
-        }
+        if (top > pr.yMax - screenPadding.y)
+            pos.y -= top - (pr.yMax - screenPadding.y);
+        else if (top - m.height < pr.yMin + screenPadding.y)
+            pos.y += (pr.yMin + screenPadding.y) - (top - m.height);
 
         menu.anchoredPosition = pos;
+    }
+    void ForwardRightClickToAnyContextTarget()
+    {
+        var es = EventSystem.current;
+        if (es == null) return;
+
+        var pointer = new PointerEventData(es)
+        {
+            position = UnityEngine.InputSystem.Mouse.current.position.ReadValue(),
+            button = PointerEventData.InputButton.Right
+        };
+
+        var results = new System.Collections.Generic.List<RaycastResult>();
+        es.RaycastAll(pointer, results);
+
+        foreach (var r in results)
+        {
+            var unitCtx = r.gameObject.GetComponent<UnitListItemHandle>();
+            if (unitCtx != null) { unitCtx.OnPointerClick(pointer); return; }
+
+            var groupCtx = r.gameObject.GetComponent<GroupHeaderContextMenu>();
+            if (groupCtx != null) { groupCtx.OnPointerClick(pointer); return; }
+        }
     }
 
     public void CloseMenu()
     {
         if (_menu) Destroy(_menu.gameObject);
         if (_blocker) Destroy(_blocker);
-        _menu = null;
-        _blocker = null;
+        _menu = null; _blocker = null;
     }
 
     void OnDisable() => CloseMenu();

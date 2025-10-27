@@ -23,11 +23,12 @@ public class SelectionManager : MonoBehaviour
     public int Count => _selection.Count;
     public event Action<IReadOnlyCollection<Unit>> OnSelectionChanged;
 
-    // �ncora para SHIFT (intervalo)
     Unit _rangeAnchor;     // << era _anchorUnit
 
     // controle de drag (coordenadas de tela)
-    Vector2 _dragStart;
+    //Vector2 _dragStart;
+    Vector3 _dragStartWorld;
+    Vector3 _dragEndWorld;
     public void ClearAnchor() => _rangeAnchor = null;
 
 
@@ -55,84 +56,45 @@ public class SelectionManager : MonoBehaviour
     }
     void OnBeginDragHandler(Vector2 startScreenPos)
     {
-        _dragStart = startScreenPos;
+        //_dragStart = startScreenPos;
+        if (Physics.Raycast(cam.ScreenPointToRay(startScreenPos), out var hit))
+            _dragStartWorld = hit.point;
     }
 
     // ======== Handlers de Input ========
 
-    void HandleClickUnit(Unit unit, bool ctrl, bool shift)
+    void HandleClickUnit(Unit unit, bool ctrl)
     {
         if (onlyOwnUnits && unit.owner != player.myFaction) return;
 
-        if (shift)
-        {
-            // intervalo no "mundo": ret�ngulo entre �ncora e alvo clicado
-            // Se ainda n�o existe �ncora, trata como clique normal e define �ncora.
-            if (_rangeAnchor == null)
-            {
-                if (ctrl) Toggle(unit);
-                else { Clear(); Add(unit); }
-                _rangeAnchor = unit;     // define �ncora
-                FireChanged();
-                return;
-            }
-
-            // SHIFT: seleciona intervalo entre �ncora fixa e o novo alvo.
-            var a = cam.WorldToScreenPoint(_rangeAnchor.transform.position);
-            var b = cam.WorldToScreenPoint(unit.transform.position);
-
-            // Seleciona o intervalo
-            var rect = Inflate(BuildRect(a, b), rectInflatePx);
-            SelectByScreenRect(rect, additive: ctrl);
-
-            // Garante os extremos dentro (�ncora e alvo)
-            if (!onlyOwnUnits || _rangeAnchor.owner == player.myFaction) Add(_rangeAnchor);
-            Add(unit);
-
-            // IMPORTANTE: N�O muda a �ncora enquanto Shift estiver pressionado
-            FireChanged();
-            return;
-        }
-
-        // Sem shift: clique normal
         if (ctrl) Toggle(unit);
         else { Clear(); Add(unit); }
 
         _rangeAnchor = unit;
         FireChanged();
     }
-    void HandleClickGround(Vector3 worldPoint, bool ctrl, bool shift)
+    void HandleClickGround(Vector3 worldPoint, bool ctrl)
     {
-        if (shift && _rangeAnchor != null)
-        {
-            // SHIFT + clique no terreno: usa �ncora e o ponto clicado
-            var a = cam.WorldToScreenPoint(_rangeAnchor.transform.position);
-            var b = cam.WorldToScreenPoint(worldPoint);
 
-            var rect = Inflate(BuildRect(a, b), rectInflatePx);
-            SelectByScreenRect(rect, additive: ctrl);
-
-            // garante a �ncora dentro
-            if (!onlyOwnUnits || _rangeAnchor.owner == player.myFaction) Add(_rangeAnchor);
-
-            // N�O muda a �ncora
-            FireChanged();
-            return;
-        }
-
-        // clique no ch�o (ou RMB no seu setup): limpa sele��o
+        // clique no chão (ou RMB no seu setup): limpa seleção
         Clear();
-        // opcional: n�o mexer na �ncora; ela permanece at� um clique normal substituir
+        // opcional: não mexer na áncora; ela permanece até um clique normal substituir
         FireChanged();
     }
     void HandleEndDrag(Vector2 endScreenPos)
     {
-        // arrasto retangular: substitui; com Ctrl, adiciona
         bool ctrl = input != null && input.IsCtrlPressed;
-        SelectByScreenRect(BuildRect(_dragStart, endScreenPos), additive: ctrl);
-        // N�O altera _rangeAnchor
+
+        Vector3 endWorld;
+        if (Physics.Raycast(cam.ScreenPointToRay(endScreenPos), out var hit))
+            endWorld = hit.point;
+        else
+            endWorld = ProjectScreenToXZ(endScreenPos); // fallback se não colidir com terreno
+
+        SelectByWorldRect(_dragStartWorld, endWorld, additive: ctrl);
         FireChanged();
     }
+
     void HandleDoubleClickUnit(Unit unit)
     {
         if (onlyOwnUnits && unit.owner != player.myFaction) return;
@@ -173,30 +135,39 @@ public class SelectionManager : MonoBehaviour
         foreach (var u in _selection) u.SetSelected(false);
         _selection.Clear();
     }
+    Vector3 ProjectScreenToXZ(Vector2 screenPos)
+    {
+        var ray = cam.ScreenPointToRay(screenPos);
+        Plane groundPlane = new Plane(Vector3.up, Vector3.zero); // plano XZ no Y=0
+        if (groundPlane.Raycast(ray, out float enter))
+            return ray.GetPoint(enter);
+        return Vector3.zero; // fallback
+    }
 
-    void SelectByScreenRect(Rect screenRect, bool additive)
+    void SelectByWorldRect(Vector3 a, Vector3 b, bool additive)
     {
         if (!additive) Clear();
+
+        var min = Vector3.Min(a, b);
+        var max = Vector3.Max(a, b);
+
+        var bounds = new Bounds();
+        bounds.SetMinMax(
+            new Vector3(min.x, float.MinValue, min.z),
+            new Vector3(max.x, float.MaxValue, max.z)
+        );
 
         var mine = UnitRegistry.GetByFaction(player.myFaction);
         for (int i = 0; i < mine.Count; i++)
         {
             var u = mine[i];
-            var sp = cam.WorldToScreenPoint(u.transform.position);
-            if (sp.z <= 0f) continue;                   // atr�s da c�mera
-            if (!IsInViewport(sp)) continue;            // fora da tela
-            if (screenRect.Contains(sp, true)) Add(u);  // centro-dentro
+            var pos = u.transform.position;
+            if (bounds.Contains(new Vector3(pos.x, 0f, pos.z))) Add(u);
         }
     }
 
-    // ======== Util ========
 
-    Rect BuildRect(Vector2 a, Vector2 b)
-    {
-        var min = Vector2.Min(a, b);
-        var max = Vector2.Max(a, b);
-        return Rect.MinMaxRect(min.x, min.y, max.x, max.y);
-    }
+    // ======== Util ========
 
     bool IsInViewport(Vector3 screenPos)
     {
