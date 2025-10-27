@@ -1,3 +1,8 @@
+---
+layout: default
+title: LOTE 3 — MÓDULO UNIT (SISTEMA DE UNIDADES)
+permalink: /lote-3/
+---
 # LOTE 3 — MÓDULO UNIT (SISTEMA DE UNIDADES)
 
 **Versão:** 3.0  
