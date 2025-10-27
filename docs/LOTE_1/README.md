@@ -1,3 +1,8 @@
+---
+layout: default
+title: LOTE 1 - CORE SYSTEM
+permalink: /lote-1/
+---
 # LOTE 1 — CORE SYSTEM
 
 **Versão:** 2.1 (Atualizada - Outubro 2025)  
