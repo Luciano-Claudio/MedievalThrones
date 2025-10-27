@@ -52,6 +52,12 @@ public static class GameEvents
     /// <summary>Disparado quando XP ou Level de unidade mudam</summary>
     public static event Action<Unit> OnUnitProgressChanged;
 
+    /// <summary>
+    /// NOVO: Disparado quando uma unidade morre
+    /// Usado pelo FormationGroupManager para remover unidades de grupos
+    /// </summary>
+    public static event Action<Unit> OnUnitDied;
+
     // ========== SELEÇÃO (NOVO - Refatoração Módulo Selection) ==========
     /// <summary>Disparado quando a seleção de unidades muda (conjunto completo)</summary>
     public static event Action<IReadOnlyCollection<Unit>> OnSelectionChanged;
@@ -95,6 +101,11 @@ public static class GameEvents
 
     /// <summary>Disparado quando unidades são removidas de um grupo</summary>
     public static event Action<UnitGroup, IReadOnlyList<Unit>> OnUnitsRemovedFromGroup;
+
+    /// <summary>
+    /// Disparado quando o jogador clica com botão esquerdo no terreno para mover unidades
+    /// </summary>
+    public static event Action<Vector3> OnMoveCommand;
 
     // ==================== RAISE HELPERS ====================
 
@@ -155,6 +166,13 @@ public static class GameEvents
     public static void RaiseUnitProgressChanged(Unit unit)
         => OnUnitProgressChanged?.Invoke(unit);
 
+    /// <summary>
+    /// NOVO: Notifica que uma unidade morreu
+    /// Chame este método no Unit.Die() ou sistema de combate
+    /// </summary>
+    public static void RaiseUnitDied(Unit unit)
+        => OnUnitDied?.Invoke(unit);
+
     // --- Seleção (NOVO - Refatoração Módulo Selection) ---
     public static void RaiseSelectionChanged(IReadOnlyCollection<Unit> selection)
         => OnSelectionChanged?.Invoke(selection);
@@ -198,4 +216,10 @@ public static class GameEvents
 
     public static void RaiseUnitsRemovedFromGroup(UnitGroup group, IReadOnlyList<Unit> units)
         => OnUnitsRemovedFromGroup?.Invoke(group, units);
+
+    /// <summary>
+    /// Disparado quando o jogador clica com botão esquerdo no terreno para mover unidades
+    /// </summary>
+    public static void RaiseMoveCommand(Vector3 worldPosition)
+        => OnMoveCommand?.Invoke(worldPosition);
 }

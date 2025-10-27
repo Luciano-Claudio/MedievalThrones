@@ -3,6 +3,22 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.EventSystems;
 
+/// <summary>
+/// Gerencia input de seleção e comandos de unidades
+/// VERSÃO 3.1 - Corrigido sistema de prioridade de ações
+/// 
+/// PRIORIDADE DE AÇÕES (maior → menor):
+/// 1. UI (EventSystem)
+/// 2. Drag Selection (retângulo de seleção)
+/// 3. Unit Click (selecionar unidade)
+/// 4. Movement Command (mover unidades)
+/// 5. Ground Click (desselecionar com Ctrl)
+/// 
+/// PROTEÇÕES:
+/// - Click em unidade NÃO dispara movimento
+/// - Drag NÃO dispara movimento no início
+/// - Click sobre UI é ignorado completamente
+/// </summary>
 public class InputSelection : MonoBehaviour
 {
     [Header("Refs")]
@@ -18,16 +34,6 @@ public class InputSelection : MonoBehaviour
     public InputActionReference rmb;   // Button
     public InputActionReference ctrl;  // Button
     public InputActionReference shift; // Button
-
-    // REFATORAÇÃO: Eventos locais removidos, agora usa GameEvents
-    // public event Action<Vector2> OnPointerDown;           // REMOVIDO
-    // public event Action<Vector2> OnPointerUp;             // REMOVIDO
-    // public event Action<Vector2> OnBeginDrag;             // REMOVIDO
-    // public event Action<Vector2> OnDragging;              // REMOVIDO
-    // public event Action<Vector2> OnEndDrag;               // REMOVIDO
-    // public event Action<Unit, bool> OnClickUnit;          // REMOVIDO
-    // public event Action<Unit> OnDoubleClickUnit;          // REMOVIDO
-    // public event Action<Vector3, bool> OnClickGround;     // REMOVIDO
 
     public bool IsCtrlPressed => ctrl != null && ctrl.action.IsPressed();
     public bool IsShiftPressed => shift != null && shift.action.IsPressed();
@@ -81,7 +87,7 @@ public class InputSelection : MonoBehaviour
             Vector2.Distance(_downPos, _pointer) >= dragThresholdPx)
         {
             _dragging = true;
-            // REFATORAÇÃO: Disparar evento via GameEvents
+            // Disparar evento via GameEvents
             GameEvents.RaiseDragBegin(_downPos);
         }
     }
@@ -93,7 +99,7 @@ public class InputSelection : MonoBehaviour
         _pointer = ctx.ReadValue<Vector2>();
         if (_lmbDown && _dragging && !_pressedOverUI)
         {
-            // REFATORAÇÃO: Disparar evento via GameEvents
+            // Disparar evento via GameEvents
             GameEvents.RaiseDragging(_pointer);
         }
     }
@@ -109,7 +115,7 @@ public class InputSelection : MonoBehaviour
 
         if (!_pressedOverUI)
         {
-            // REFATORAÇÃO: Disparar evento via GameEvents
+            // Disparar evento via GameEvents
             GameEvents.RaisePointerDown(_downPos);
         }
     }
@@ -128,17 +134,20 @@ public class InputSelection : MonoBehaviour
 
         if (_dragging)
         {
-            // REFATORAÇÃO: Disparar evento via GameEvents
+            // DRAG: Disparar evento de fim de drag
+            // NÃO chama HandleClick(), evitando movimento no fim do drag
             GameEvents.RaiseDragEnd(upPos);
         }
         else
         {
+            // CLICK: Processar clique normal
             HandleClick(upPos);
         }
 
-        // REFATORAÇÃO: Disparar evento via GameEvents
+        // Disparar evento via GameEvents
         GameEvents.RaisePointerUp(upPos);
         _lmbDown = false;
+        _dragging = false;  // Reset do drag
     }
 
     void OnRmbPerformed(InputAction.CallbackContext ctx)
@@ -148,11 +157,15 @@ public class InputSelection : MonoBehaviour
 
         if (picker != null && picker.TryPickGroundAt(_pointer, out var p, out _))
         {
-            // REFATORAÇÃO: Disparar evento via GameEvents
+            // Disparar evento via GameEvents
             GameEvents.RaiseGroundClick(p, false);
         }
     }
 
+    /// <summary>
+    /// Processa clique do mouse com SISTEMA DE PRIORIDADE
+    /// CRÍTICO: A ordem dos IFs define a prioridade!
+    /// </summary>
     void HandleClick(Vector2 screenPos)
     {
         if (picker == null) return;
@@ -160,31 +173,65 @@ public class InputSelection : MonoBehaviour
         bool isCtrl = IsCtrlPressed;
         bool isShift = IsShiftPressed;
 
+        // ============================================================
+        // PRIORIDADE 1: CLICAR EM UNIDADE (Seleção)
+        // ============================================================
+        // Se clicou em uma unidade, APENAS seleciona, NÃO move
         if (picker.TryPickUnitAt(screenPos, out var unit))
         {
-            // double click
+            // Verificar double click
             if (unit == _lastClickedUnit &&
                 (Time.unscaledTime - _lastClickTime) <= doubleClickWindow)
             {
-                // REFATORAÇÃO: Disparar evento via GameEvents
                 GameEvents.RaiseUnitDoubleClick(unit);
                 _lastClickedUnit = null;
                 _lastClickTime = 0f;
-                return;
+                return;  // ← CRÍTICO: Sai aqui, NÃO dispara movimento
             }
 
-            // REFATORAÇÃO: Disparar evento via GameEvents
+            // Click simples em unidade
             GameEvents.RaiseUnitClick(unit, isCtrl);
             _lastClickedUnit = unit;
             _lastClickTime = Time.unscaledTime;
+
+            // ← CRÍTICO: RETURN aqui impede que execute o código abaixo
+            // Isso evita que clicar em unidade dispare comando de movimento
+            return;
         }
-        else if (picker.TryPickGroundAt(screenPos, out var point, out _))
+
+        // ============================================================
+        // PRIORIDADE 2: CLICAR NO CHÃO
+        // ============================================================
+        // Se chegou aqui, NÃO clicou em unidade
+        // Pode ser: movimento, desselecionar, ou interação futura (minerar, etc)
+
+        if (picker.TryPickGroundAt(screenPos, out var point, out _))
         {
-            // REFATORAÇÃO: Disparar evento via GameEvents
-            GameEvents.RaiseGroundClick(point, isCtrl);
+            // REGRA: Click no chão SEM modificadores = Comando de Movimento
+            if (!isCtrl && !isShift)
+            {
+                // Disparar comando de movimento
+                GameEvents.RaiseMoveCommand(point);
+            }
+            else
+            {
+                // Click no chão COM Ctrl/Shift = Desselecionar (comportamento antigo)
+                GameEvents.RaiseGroundClick(point, isCtrl);
+            }
+
+            // Limpar estado de double click
             _lastClickedUnit = null;
             _lastClickTime = 0f;
         }
+
+        // ============================================================
+        // PRIORIDADE 3 (FUTURO): INTERAÇÕES COM RECURSOS
+        // ============================================================
+        // Aqui você pode adicionar no futuro:
+        // - if (picker.TryPickTree(...)) → Cortar árvore
+        // - if (picker.TryPickRock(...)) → Minerar pedra
+        // - if (picker.TryPickEnemyUnit(...)) → Atacar
+        // Etc.
     }
 
     bool IsPointerOverUI() => _overUIThisFrame;

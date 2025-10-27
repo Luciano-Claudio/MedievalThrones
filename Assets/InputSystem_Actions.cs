@@ -993,6 +993,194 @@ public partial class @InputSystem_Actions: IInputActionCollection2, IDisposable
                     ""isPartOfComposite"": false
                 }
             ]
+        },
+        {
+            ""name"": ""UnitCommands"",
+            ""id"": ""2e09cc63-113b-43b2-9ff9-5117f16e979b"",
+            ""actions"": [
+                {
+                    ""name"": ""StopUnits"",
+                    ""type"": ""Button"",
+                    ""id"": ""f913b4a8-d160-405f-bc24-921ca52e40a3"",
+                    ""expectedControlType"": """",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false
+                },
+                {
+                    ""name"": ""CycleFormation"",
+                    ""type"": ""Button"",
+                    ""id"": ""41e8f3a1-9b7f-4a34-93be-99d7dcc156e8"",
+                    ""expectedControlType"": """",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false
+                },
+                {
+                    ""name"": ""ToggleDebug"",
+                    ""type"": ""Button"",
+                    ""id"": ""024832ce-0bc3-4ba8-87a6-9464e8eaeca2"",
+                    ""expectedControlType"": """",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false
+                },
+                {
+                    ""name"": ""FormationLine"",
+                    ""type"": ""Button"",
+                    ""id"": ""99b14fb7-80d1-4167-b623-08766e88eaa1"",
+                    ""expectedControlType"": """",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false
+                },
+                {
+                    ""name"": ""FormationColumn"",
+                    ""type"": ""Button"",
+                    ""id"": ""6465c88a-c414-489e-b70c-392e8ff989dd"",
+                    ""expectedControlType"": """",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false
+                },
+                {
+                    ""name"": ""FormationTriangular"",
+                    ""type"": ""Button"",
+                    ""id"": ""5adf01f8-1276-4e52-8f26-853b8626b8a3"",
+                    ""expectedControlType"": """",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false
+                },
+                {
+                    ""name"": ""FormationWedge"",
+                    ""type"": ""Button"",
+                    ""id"": ""e9012779-5789-403a-a867-59294303d1b4"",
+                    ""expectedControlType"": """",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false
+                },
+                {
+                    ""name"": ""FormationCircular"",
+                    ""type"": ""Button"",
+                    ""id"": ""97871cbb-a2e4-4978-aa5e-24432e7f3041"",
+                    ""expectedControlType"": """",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false
+                },
+                {
+                    ""name"": ""FormationSquare"",
+                    ""type"": ""Button"",
+                    ""id"": ""7b0d2581-6f5b-4da9-985c-0c9ee7b75a0a"",
+                    ""expectedControlType"": """",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false
+                }
+            ],
+            ""bindings"": [
+                {
+                    ""name"": """",
+                    ""id"": ""967487e1-d6c8-4e1f-b7dc-f477e94b3e64"",
+                    ""path"": ""<Keyboard>/h"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""StopUnits"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""a6611ab3-ca14-494f-a363-0c6b81f44d0f"",
+                    ""path"": ""<Keyboard>/f"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""CycleFormation"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""b035ac4f-8133-4fcf-b31e-ba09b1da9523"",
+                    ""path"": ""<Keyboard>/quote"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""ToggleDebug"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""d230163b-459c-4779-8db0-31ba6a87aa01"",
+                    ""path"": ""<Keyboard>/f1"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""FormationLine"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""6638dae7-ba6e-4b7b-ba4d-072b764ec0f5"",
+                    ""path"": ""<Keyboard>/f2"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""FormationColumn"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""21e8a359-3de3-4ce7-8916-31f28a986193"",
+                    ""path"": ""<Keyboard>/f3"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""FormationTriangular"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""203fc8de-6076-43e6-8dbf-d22261a9bee3"",
+                    ""path"": ""<Keyboard>/f4"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""FormationWedge"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""5d2a280d-cdf7-4f2b-a1cd-d893e30a37b9"",
+                    ""path"": ""<Keyboard>/f5"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""FormationCircular"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""7ec15443-37a5-41cd-92ca-2acc0122101e"",
+                    ""path"": ""<Keyboard>/f6"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""FormationSquare"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                }
+            ]
         }
     ],
     ""controlSchemes"": [
@@ -1085,6 +1273,17 @@ public partial class @InputSystem_Actions: IInputActionCollection2, IDisposable
         m_Camera_PointerPosition = m_Camera.FindAction("PointerPosition", throwIfNotFound: true);
         m_Camera_PointerDelta = m_Camera.FindAction("PointerDelta", throwIfNotFound: true);
         m_Camera_MiddleButton = m_Camera.FindAction("MiddleButton", throwIfNotFound: true);
+        // UnitCommands
+        m_UnitCommands = asset.FindActionMap("UnitCommands", throwIfNotFound: true);
+        m_UnitCommands_StopUnits = m_UnitCommands.FindAction("StopUnits", throwIfNotFound: true);
+        m_UnitCommands_CycleFormation = m_UnitCommands.FindAction("CycleFormation", throwIfNotFound: true);
+        m_UnitCommands_ToggleDebug = m_UnitCommands.FindAction("ToggleDebug", throwIfNotFound: true);
+        m_UnitCommands_FormationLine = m_UnitCommands.FindAction("FormationLine", throwIfNotFound: true);
+        m_UnitCommands_FormationColumn = m_UnitCommands.FindAction("FormationColumn", throwIfNotFound: true);
+        m_UnitCommands_FormationTriangular = m_UnitCommands.FindAction("FormationTriangular", throwIfNotFound: true);
+        m_UnitCommands_FormationWedge = m_UnitCommands.FindAction("FormationWedge", throwIfNotFound: true);
+        m_UnitCommands_FormationCircular = m_UnitCommands.FindAction("FormationCircular", throwIfNotFound: true);
+        m_UnitCommands_FormationSquare = m_UnitCommands.FindAction("FormationSquare", throwIfNotFound: true);
     }
 
     ~@InputSystem_Actions()
@@ -1092,6 +1291,7 @@ public partial class @InputSystem_Actions: IInputActionCollection2, IDisposable
         UnityEngine.Debug.Assert(!m_UI.enabled, "This will cause a leak and performance issues, InputSystem_Actions.UI.Disable() has not been called.");
         UnityEngine.Debug.Assert(!m_Selection.enabled, "This will cause a leak and performance issues, InputSystem_Actions.Selection.Disable() has not been called.");
         UnityEngine.Debug.Assert(!m_Camera.enabled, "This will cause a leak and performance issues, InputSystem_Actions.Camera.Disable() has not been called.");
+        UnityEngine.Debug.Assert(!m_UnitCommands.enabled, "This will cause a leak and performance issues, InputSystem_Actions.UnitCommands.Disable() has not been called.");
     }
 
     /// <summary>
@@ -1649,6 +1849,190 @@ public partial class @InputSystem_Actions: IInputActionCollection2, IDisposable
     /// Provides a new <see cref="CameraActions" /> instance referencing this action map.
     /// </summary>
     public CameraActions @Camera => new CameraActions(this);
+
+    // UnitCommands
+    private readonly InputActionMap m_UnitCommands;
+    private List<IUnitCommandsActions> m_UnitCommandsActionsCallbackInterfaces = new List<IUnitCommandsActions>();
+    private readonly InputAction m_UnitCommands_StopUnits;
+    private readonly InputAction m_UnitCommands_CycleFormation;
+    private readonly InputAction m_UnitCommands_ToggleDebug;
+    private readonly InputAction m_UnitCommands_FormationLine;
+    private readonly InputAction m_UnitCommands_FormationColumn;
+    private readonly InputAction m_UnitCommands_FormationTriangular;
+    private readonly InputAction m_UnitCommands_FormationWedge;
+    private readonly InputAction m_UnitCommands_FormationCircular;
+    private readonly InputAction m_UnitCommands_FormationSquare;
+    /// <summary>
+    /// Provides access to input actions defined in input action map "UnitCommands".
+    /// </summary>
+    public struct UnitCommandsActions
+    {
+        private @InputSystem_Actions m_Wrapper;
+
+        /// <summary>
+        /// Construct a new instance of the input action map wrapper class.
+        /// </summary>
+        public UnitCommandsActions(@InputSystem_Actions wrapper) { m_Wrapper = wrapper; }
+        /// <summary>
+        /// Provides access to the underlying input action "UnitCommands/StopUnits".
+        /// </summary>
+        public InputAction @StopUnits => m_Wrapper.m_UnitCommands_StopUnits;
+        /// <summary>
+        /// Provides access to the underlying input action "UnitCommands/CycleFormation".
+        /// </summary>
+        public InputAction @CycleFormation => m_Wrapper.m_UnitCommands_CycleFormation;
+        /// <summary>
+        /// Provides access to the underlying input action "UnitCommands/ToggleDebug".
+        /// </summary>
+        public InputAction @ToggleDebug => m_Wrapper.m_UnitCommands_ToggleDebug;
+        /// <summary>
+        /// Provides access to the underlying input action "UnitCommands/FormationLine".
+        /// </summary>
+        public InputAction @FormationLine => m_Wrapper.m_UnitCommands_FormationLine;
+        /// <summary>
+        /// Provides access to the underlying input action "UnitCommands/FormationColumn".
+        /// </summary>
+        public InputAction @FormationColumn => m_Wrapper.m_UnitCommands_FormationColumn;
+        /// <summary>
+        /// Provides access to the underlying input action "UnitCommands/FormationTriangular".
+        /// </summary>
+        public InputAction @FormationTriangular => m_Wrapper.m_UnitCommands_FormationTriangular;
+        /// <summary>
+        /// Provides access to the underlying input action "UnitCommands/FormationWedge".
+        /// </summary>
+        public InputAction @FormationWedge => m_Wrapper.m_UnitCommands_FormationWedge;
+        /// <summary>
+        /// Provides access to the underlying input action "UnitCommands/FormationCircular".
+        /// </summary>
+        public InputAction @FormationCircular => m_Wrapper.m_UnitCommands_FormationCircular;
+        /// <summary>
+        /// Provides access to the underlying input action "UnitCommands/FormationSquare".
+        /// </summary>
+        public InputAction @FormationSquare => m_Wrapper.m_UnitCommands_FormationSquare;
+        /// <summary>
+        /// Provides access to the underlying input action map instance.
+        /// </summary>
+        public InputActionMap Get() { return m_Wrapper.m_UnitCommands; }
+        /// <inheritdoc cref="UnityEngine.InputSystem.InputActionMap.Enable()" />
+        public void Enable() { Get().Enable(); }
+        /// <inheritdoc cref="UnityEngine.InputSystem.InputActionMap.Disable()" />
+        public void Disable() { Get().Disable(); }
+        /// <inheritdoc cref="UnityEngine.InputSystem.InputActionMap.enabled" />
+        public bool enabled => Get().enabled;
+        /// <summary>
+        /// Implicitly converts an <see ref="UnitCommandsActions" /> to an <see ref="InputActionMap" /> instance.
+        /// </summary>
+        public static implicit operator InputActionMap(UnitCommandsActions set) { return set.Get(); }
+        /// <summary>
+        /// Adds <see cref="InputAction.started"/>, <see cref="InputAction.performed"/> and <see cref="InputAction.canceled"/> callbacks provided via <param cref="instance" /> on all input actions contained in this map.
+        /// </summary>
+        /// <param name="instance">Callback instance.</param>
+        /// <remarks>
+        /// If <paramref name="instance" /> is <c>null</c> or <paramref name="instance"/> have already been added this method does nothing.
+        /// </remarks>
+        /// <seealso cref="UnitCommandsActions" />
+        public void AddCallbacks(IUnitCommandsActions instance)
+        {
+            if (instance == null || m_Wrapper.m_UnitCommandsActionsCallbackInterfaces.Contains(instance)) return;
+            m_Wrapper.m_UnitCommandsActionsCallbackInterfaces.Add(instance);
+            @StopUnits.started += instance.OnStopUnits;
+            @StopUnits.performed += instance.OnStopUnits;
+            @StopUnits.canceled += instance.OnStopUnits;
+            @CycleFormation.started += instance.OnCycleFormation;
+            @CycleFormation.performed += instance.OnCycleFormation;
+            @CycleFormation.canceled += instance.OnCycleFormation;
+            @ToggleDebug.started += instance.OnToggleDebug;
+            @ToggleDebug.performed += instance.OnToggleDebug;
+            @ToggleDebug.canceled += instance.OnToggleDebug;
+            @FormationLine.started += instance.OnFormationLine;
+            @FormationLine.performed += instance.OnFormationLine;
+            @FormationLine.canceled += instance.OnFormationLine;
+            @FormationColumn.started += instance.OnFormationColumn;
+            @FormationColumn.performed += instance.OnFormationColumn;
+            @FormationColumn.canceled += instance.OnFormationColumn;
+            @FormationTriangular.started += instance.OnFormationTriangular;
+            @FormationTriangular.performed += instance.OnFormationTriangular;
+            @FormationTriangular.canceled += instance.OnFormationTriangular;
+            @FormationWedge.started += instance.OnFormationWedge;
+            @FormationWedge.performed += instance.OnFormationWedge;
+            @FormationWedge.canceled += instance.OnFormationWedge;
+            @FormationCircular.started += instance.OnFormationCircular;
+            @FormationCircular.performed += instance.OnFormationCircular;
+            @FormationCircular.canceled += instance.OnFormationCircular;
+            @FormationSquare.started += instance.OnFormationSquare;
+            @FormationSquare.performed += instance.OnFormationSquare;
+            @FormationSquare.canceled += instance.OnFormationSquare;
+        }
+
+        /// <summary>
+        /// Removes <see cref="InputAction.started"/>, <see cref="InputAction.performed"/> and <see cref="InputAction.canceled"/> callbacks provided via <param cref="instance" /> on all input actions contained in this map.
+        /// </summary>
+        /// <remarks>
+        /// Calling this method when <paramref name="instance" /> have not previously been registered has no side-effects.
+        /// </remarks>
+        /// <seealso cref="UnitCommandsActions" />
+        private void UnregisterCallbacks(IUnitCommandsActions instance)
+        {
+            @StopUnits.started -= instance.OnStopUnits;
+            @StopUnits.performed -= instance.OnStopUnits;
+            @StopUnits.canceled -= instance.OnStopUnits;
+            @CycleFormation.started -= instance.OnCycleFormation;
+            @CycleFormation.performed -= instance.OnCycleFormation;
+            @CycleFormation.canceled -= instance.OnCycleFormation;
+            @ToggleDebug.started -= instance.OnToggleDebug;
+            @ToggleDebug.performed -= instance.OnToggleDebug;
+            @ToggleDebug.canceled -= instance.OnToggleDebug;
+            @FormationLine.started -= instance.OnFormationLine;
+            @FormationLine.performed -= instance.OnFormationLine;
+            @FormationLine.canceled -= instance.OnFormationLine;
+            @FormationColumn.started -= instance.OnFormationColumn;
+            @FormationColumn.performed -= instance.OnFormationColumn;
+            @FormationColumn.canceled -= instance.OnFormationColumn;
+            @FormationTriangular.started -= instance.OnFormationTriangular;
+            @FormationTriangular.performed -= instance.OnFormationTriangular;
+            @FormationTriangular.canceled -= instance.OnFormationTriangular;
+            @FormationWedge.started -= instance.OnFormationWedge;
+            @FormationWedge.performed -= instance.OnFormationWedge;
+            @FormationWedge.canceled -= instance.OnFormationWedge;
+            @FormationCircular.started -= instance.OnFormationCircular;
+            @FormationCircular.performed -= instance.OnFormationCircular;
+            @FormationCircular.canceled -= instance.OnFormationCircular;
+            @FormationSquare.started -= instance.OnFormationSquare;
+            @FormationSquare.performed -= instance.OnFormationSquare;
+            @FormationSquare.canceled -= instance.OnFormationSquare;
+        }
+
+        /// <summary>
+        /// Unregisters <param cref="instance" /> and unregisters all input action callbacks via <see cref="UnitCommandsActions.UnregisterCallbacks(IUnitCommandsActions)" />.
+        /// </summary>
+        /// <seealso cref="UnitCommandsActions.UnregisterCallbacks(IUnitCommandsActions)" />
+        public void RemoveCallbacks(IUnitCommandsActions instance)
+        {
+            if (m_Wrapper.m_UnitCommandsActionsCallbackInterfaces.Remove(instance))
+                UnregisterCallbacks(instance);
+        }
+
+        /// <summary>
+        /// Replaces all existing callback instances and previously registered input action callbacks associated with them with callbacks provided via <param cref="instance" />.
+        /// </summary>
+        /// <remarks>
+        /// If <paramref name="instance" /> is <c>null</c>, calling this method will only unregister all existing callbacks but not register any new callbacks.
+        /// </remarks>
+        /// <seealso cref="UnitCommandsActions.AddCallbacks(IUnitCommandsActions)" />
+        /// <seealso cref="UnitCommandsActions.RemoveCallbacks(IUnitCommandsActions)" />
+        /// <seealso cref="UnitCommandsActions.UnregisterCallbacks(IUnitCommandsActions)" />
+        public void SetCallbacks(IUnitCommandsActions instance)
+        {
+            foreach (var item in m_Wrapper.m_UnitCommandsActionsCallbackInterfaces)
+                UnregisterCallbacks(item);
+            m_Wrapper.m_UnitCommandsActionsCallbackInterfaces.Clear();
+            AddCallbacks(instance);
+        }
+    }
+    /// <summary>
+    /// Provides a new <see cref="UnitCommandsActions" /> instance referencing this action map.
+    /// </summary>
+    public UnitCommandsActions @UnitCommands => new UnitCommandsActions(this);
     private int m_KeyboardMouseSchemeIndex = -1;
     /// <summary>
     /// Provides access to the input control scheme.
@@ -1884,5 +2268,76 @@ public partial class @InputSystem_Actions: IInputActionCollection2, IDisposable
         /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
         /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
         void OnMiddleButton(InputAction.CallbackContext context);
+    }
+    /// <summary>
+    /// Interface to implement callback methods for all input action callbacks associated with input actions defined by "UnitCommands" which allows adding and removing callbacks.
+    /// </summary>
+    /// <seealso cref="UnitCommandsActions.AddCallbacks(IUnitCommandsActions)" />
+    /// <seealso cref="UnitCommandsActions.RemoveCallbacks(IUnitCommandsActions)" />
+    public interface IUnitCommandsActions
+    {
+        /// <summary>
+        /// Method invoked when associated input action "StopUnits" is either <see cref="UnityEngine.InputSystem.InputAction.started" />, <see cref="UnityEngine.InputSystem.InputAction.performed" /> or <see cref="UnityEngine.InputSystem.InputAction.canceled" />.
+        /// </summary>
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.started" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
+        void OnStopUnits(InputAction.CallbackContext context);
+        /// <summary>
+        /// Method invoked when associated input action "CycleFormation" is either <see cref="UnityEngine.InputSystem.InputAction.started" />, <see cref="UnityEngine.InputSystem.InputAction.performed" /> or <see cref="UnityEngine.InputSystem.InputAction.canceled" />.
+        /// </summary>
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.started" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
+        void OnCycleFormation(InputAction.CallbackContext context);
+        /// <summary>
+        /// Method invoked when associated input action "ToggleDebug" is either <see cref="UnityEngine.InputSystem.InputAction.started" />, <see cref="UnityEngine.InputSystem.InputAction.performed" /> or <see cref="UnityEngine.InputSystem.InputAction.canceled" />.
+        /// </summary>
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.started" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
+        void OnToggleDebug(InputAction.CallbackContext context);
+        /// <summary>
+        /// Method invoked when associated input action "FormationLine" is either <see cref="UnityEngine.InputSystem.InputAction.started" />, <see cref="UnityEngine.InputSystem.InputAction.performed" /> or <see cref="UnityEngine.InputSystem.InputAction.canceled" />.
+        /// </summary>
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.started" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
+        void OnFormationLine(InputAction.CallbackContext context);
+        /// <summary>
+        /// Method invoked when associated input action "FormationColumn" is either <see cref="UnityEngine.InputSystem.InputAction.started" />, <see cref="UnityEngine.InputSystem.InputAction.performed" /> or <see cref="UnityEngine.InputSystem.InputAction.canceled" />.
+        /// </summary>
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.started" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
+        void OnFormationColumn(InputAction.CallbackContext context);
+        /// <summary>
+        /// Method invoked when associated input action "FormationTriangular" is either <see cref="UnityEngine.InputSystem.InputAction.started" />, <see cref="UnityEngine.InputSystem.InputAction.performed" /> or <see cref="UnityEngine.InputSystem.InputAction.canceled" />.
+        /// </summary>
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.started" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
+        void OnFormationTriangular(InputAction.CallbackContext context);
+        /// <summary>
+        /// Method invoked when associated input action "FormationWedge" is either <see cref="UnityEngine.InputSystem.InputAction.started" />, <see cref="UnityEngine.InputSystem.InputAction.performed" /> or <see cref="UnityEngine.InputSystem.InputAction.canceled" />.
+        /// </summary>
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.started" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
+        void OnFormationWedge(InputAction.CallbackContext context);
+        /// <summary>
+        /// Method invoked when associated input action "FormationCircular" is either <see cref="UnityEngine.InputSystem.InputAction.started" />, <see cref="UnityEngine.InputSystem.InputAction.performed" /> or <see cref="UnityEngine.InputSystem.InputAction.canceled" />.
+        /// </summary>
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.started" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
+        void OnFormationCircular(InputAction.CallbackContext context);
+        /// <summary>
+        /// Method invoked when associated input action "FormationSquare" is either <see cref="UnityEngine.InputSystem.InputAction.started" />, <see cref="UnityEngine.InputSystem.InputAction.performed" /> or <see cref="UnityEngine.InputSystem.InputAction.canceled" />.
+        /// </summary>
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.started" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
+        void OnFormationSquare(InputAction.CallbackContext context);
     }
 }

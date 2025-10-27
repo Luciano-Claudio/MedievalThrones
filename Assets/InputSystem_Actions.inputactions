@@ -1,4 +1,5 @@
 {
+    "version": 1,
     "name": "InputSystem_Actions",
     "maps": [
         {
@@ -902,6 +903,194 @@
                     "processors": "",
                     "groups": "",
                     "action": "MiddleButton",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                }
+            ]
+        },
+        {
+            "name": "UnitCommands",
+            "id": "2e09cc63-113b-43b2-9ff9-5117f16e979b",
+            "actions": [
+                {
+                    "name": "StopUnits",
+                    "type": "Button",
+                    "id": "f913b4a8-d160-405f-bc24-921ca52e40a3",
+                    "expectedControlType": "",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "CycleFormation",
+                    "type": "Button",
+                    "id": "41e8f3a1-9b7f-4a34-93be-99d7dcc156e8",
+                    "expectedControlType": "",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "ToggleDebug",
+                    "type": "Button",
+                    "id": "024832ce-0bc3-4ba8-87a6-9464e8eaeca2",
+                    "expectedControlType": "",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "FormationLine",
+                    "type": "Button",
+                    "id": "99b14fb7-80d1-4167-b623-08766e88eaa1",
+                    "expectedControlType": "",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "FormationColumn",
+                    "type": "Button",
+                    "id": "6465c88a-c414-489e-b70c-392e8ff989dd",
+                    "expectedControlType": "",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "FormationTriangular",
+                    "type": "Button",
+                    "id": "5adf01f8-1276-4e52-8f26-853b8626b8a3",
+                    "expectedControlType": "",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "FormationWedge",
+                    "type": "Button",
+                    "id": "e9012779-5789-403a-a867-59294303d1b4",
+                    "expectedControlType": "",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "FormationCircular",
+                    "type": "Button",
+                    "id": "97871cbb-a2e4-4978-aa5e-24432e7f3041",
+                    "expectedControlType": "",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "FormationSquare",
+                    "type": "Button",
+                    "id": "7b0d2581-6f5b-4da9-985c-0c9ee7b75a0a",
+                    "expectedControlType": "",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                }
+            ],
+            "bindings": [
+                {
+                    "name": "",
+                    "id": "967487e1-d6c8-4e1f-b7dc-f477e94b3e64",
+                    "path": "<Keyboard>/h",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "StopUnits",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "a6611ab3-ca14-494f-a363-0c6b81f44d0f",
+                    "path": "<Keyboard>/f",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "CycleFormation",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "b035ac4f-8133-4fcf-b31e-ba09b1da9523",
+                    "path": "<Keyboard>/quote",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "ToggleDebug",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "d230163b-459c-4779-8db0-31ba6a87aa01",
+                    "path": "<Keyboard>/f1",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "FormationLine",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "6638dae7-ba6e-4b7b-ba4d-072b764ec0f5",
+                    "path": "<Keyboard>/f2",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "FormationColumn",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "21e8a359-3de3-4ce7-8916-31f28a986193",
+                    "path": "<Keyboard>/f3",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "FormationTriangular",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "203fc8de-6076-43e6-8dbf-d22261a9bee3",
+                    "path": "<Keyboard>/f4",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "FormationWedge",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "5d2a280d-cdf7-4f2b-a1cd-d893e30a37b9",
+                    "path": "<Keyboard>/f5",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "FormationCircular",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "7ec15443-37a5-41cd-92ca-2acc0122101e",
+                    "path": "<Keyboard>/f6",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "FormationSquare",
                     "isComposite": false,
                     "isPartOfComposite": false
                 }
