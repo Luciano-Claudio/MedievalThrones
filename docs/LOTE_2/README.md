@@ -1,3 +1,8 @@
+---
+layout: default
+title: LOTE 2 — CÂMERA SYSTEM RTS (CINEMACHINE V3)
+permalink: /lote-2/
+---
 # LOTE 2 — CÂMERA SYSTEM RTS (CINEMACHINE V3)
 
 **Versão:** 3.0  
