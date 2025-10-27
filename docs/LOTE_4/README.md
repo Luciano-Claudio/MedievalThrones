@@ -1,3 +1,8 @@
+---
+layout: default
+title: LOTE 4 — SELECTION SYSTEM (SISTEMA DE SELEÇÃO)
+permalink: /lote-4/
+---
 # LOTE 4 — SELECTION SYSTEM (SISTEMA DE SELEÇÃO)
 
 **Versão:** 3.0  
