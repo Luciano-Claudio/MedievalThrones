@@ -18,5 +18,6 @@ Aqui você pode acessar a documentação detalhada para cada módulo do sistema:
 * **[LOTE 3 — MÓDULO UNIT (SISTEMA DE UNIDADES)](/MedievalThrones/lote-3/)**
 * **[LOTE 4 — SELECTION SYSTEM (SISTEMA DE SELEÇÃO)](/MedievalThrones/lote-4/)**
 * **[LOTE 5 — USER INTERFACE / LEFT BAR](/MedievalThrones/lote-5/)**
+* **[LOTE 6 - MOVIMENTAÇÃO E FORMAÇÕES DE UNIDADES](/MedievalThrones/lote-6/)**
 
 ---
