@@ -354,6 +354,36 @@ public static event Action<UnitGroup, IReadOnlyList<Unit>> OnUnitsRemovedFromGro
 
 ---
 
+#### 📌 Movimentação (1 evento)
+
+```csharp
+/// <summary>Comando de movimento</summary>
+public static event Action<Vector3> OnMoveCommand;
+```
+
+**Disparado por:**
+- `InputSelection.HandleClick(Vector2 screenPos)` → `OnMoveCommand`
+
+**Escutado por:**
+- `MovementCommandHandler` (Disparado quando o jogador clica em uma posição do terreno. O `MovementCommandHandler` intercepta este evento para calcular e mover as unidades em formação.)
+
+---
+
+#### 📌 Morte da Unidade (1 evento)
+
+```csharp
+/// <summary>Morte de unidade</summary>
+public static event Action<Unit> OnUnitDied;
+```
+
+**Disparado por:**
+- `Unit.Die()` → `OnUnitDied`
+
+**Escutado por:**
+- `MovementCommandHandler` (Disparado no momento da destruição da unidade. Usado para removê-la automaticamente de qualquer grupo de formação ativo.)
+
+---
+
 ### 2.4 Métodos Raise (Helpers Centralizados)
 
 Todos os eventos possuem métodos `Raise` correspondentes para facilitar o disparo:
@@ -459,6 +489,14 @@ public static void RaiseUnitsAddedToGroup(UnitGroup group, IReadOnlyList<Unit> u
 
 public static void RaiseUnitsRemovedFromGroup(UnitGroup group, IReadOnlyList<Unit> units)
     => OnUnitsRemovedFromGroup?.Invoke(group, units);
+
+// ========== Movimentação ==========
+public static void RaiseMoveCommand(Vector3 worldPosition)
+    => OnMoveCommand?.Invoke(worldPosition);
+
+// ========== Morte ==========
+public static void RaiseUnitDied(Unit unit)
+    => OnUnitDied?.Invoke(unit);
 ```
 
 ### 2.5 Padrão de Uso Recomendado

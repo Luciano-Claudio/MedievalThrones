@@ -769,6 +769,53 @@ private void OnDisable() => UnitRegistry.Unregister(this);
 
 ---
 
+> ⚠️ Atualizado no Lote 6 — Propriedades de movimento, formação e integração com o novo sistema tático.
+
+## 🔄 Atualizações do Lote 6 – Movimento e Formação. Ponto para refatoração da documentação!
+
+O sistema de unidades foi expandido para suportar **formações táticas e movimentação coordenada**. Cada `Unit` agora possui propriedades de velocidade, prioridade tática e referência ao grupo de formação.
+
+### Novas Propriedades (Unit.cs)
+
+```csharp
+public float MaxSpeed => def ? def.moveSpeed : 3.5f;
+public FormationPriority FormationPriority => def ? def.formationPriority : FormationPriority.Medium;
+public FormationGroup CurrentFormationGroup => FormationGroupManager.Instance?.GetGroupForUnit(this);
+public bool IsInFormationGroup => CurrentFormationGroup != null;
+public FormationType CurrentFormation => CurrentFormationGroup?.Formation ?? FormationType.None;
+```
+
+Essas propriedades permitem que o `MovementCommandHandler` acesse dinamicamente as capacidades e posições das unidades dentro de uma formação.
+
+### Evento de Morte
+
+O evento `OnUnitDied` é disparado antes da destruição da unidade, garantindo que o sistema de formação limpe automaticamente suas referências:
+
+```csharp
+void Die()
+{
+    GameEvents.RaiseUnitDied(this);
+    Destroy(gameObject);
+}
+```
+
+### Novos Campos em UnitDefinition.cs
+
+```csharp
+[Header("Stats de Movimento")]
+public float moveSpeed = 3.5f;
+public float acceleration = 8f;
+public float rotationSpeed = 120f;
+
+[Header("Formação")]
+public FormationPriority formationPriority = FormationPriority.Medium;
+public float spacing = 2f;
+```
+
+Esses valores determinam a posição da unidade nas formações e seu comportamento de movimentação.
+
+---
+
 ## 4) UNITREGISTRY - REGISTRO GLOBAL
 
 ### 4.1 Visão Geral

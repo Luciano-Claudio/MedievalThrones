@@ -3655,7 +3655,97 @@ O **Lote 4 - Selection System** estabelece o **sistema completo de seleção de 
 - ✅ Acessa `SelectionManager.Selection`
 - ✅ API pública completa disponível
 
-### 15.4 Próximos Passos
+### 15.4 Atualizado no Lote 6 — Sistema de clique e prioridade de ações integrado com MovementCommandHandler. Ponto para refatoração da documentação!
+
+## Integração com o Sistema de Movimentação (Lote 6)
+
+O sistema de seleção (`InputSelection`) foi refatorado para priorizar interações e se comunicar com o novo sistema de movimentação.
+
+### Ordem de Prioridade de Ações
+
+1. **UI** (EventSystem)
+2. **Drag Selection** (retângulo de seleção)
+3. **Unit Click** (selecionar unidade)
+4. **Movement Command** (clicar no terreno)
+5. **Ground Deselect** (com Ctrl)
+
+### Novo Fluxo de Clique
+
+```csharp
+void HandleClick(Vector2 screenPos)
+{
+    if (picker == null) return;
+
+    bool isCtrl = IsCtrlPressed;
+    bool isShift = IsShiftPressed;
+
+    // ============================================================
+    // PRIORIDADE 1: CLICAR EM UNIDADE (Seleção)
+    // ============================================================
+    // Se clicou em uma unidade, APENAS seleciona, NÃO move
+    if (picker.TryPickUnitAt(screenPos, out var unit))
+    {
+        // Verificar double click
+        if (unit == _lastClickedUnit &&
+            (Time.unscaledTime - _lastClickTime) <= doubleClickWindow)
+        {
+            GameEvents.RaiseUnitDoubleClick(unit);
+            _lastClickedUnit = null;
+            _lastClickTime = 0f;
+            return;  // ← CRÍTICO: Sai aqui, NÃO dispara movimento
+        }
+
+        // Click simples em unidade
+        GameEvents.RaiseUnitClick(unit, isCtrl);
+        _lastClickedUnit = unit;
+        _lastClickTime = Time.unscaledTime;
+
+        // ← CRÍTICO: RETURN aqui impede que execute o código abaixo
+        // Isso evita que clicar em unidade dispare comando de movimento
+        return;
+    }
+
+    // ============================================================
+    // PRIORIDADE 2: CLICAR NO CHÃO
+    // ============================================================
+    // Se chegou aqui, NÃO clicou em unidade
+    // Pode ser: movimento, desselecionar, ou interação futura (minerar, etc)
+
+    if (picker.TryPickGroundAt(screenPos, out var point, out _))
+    {
+        // REGRA: Click no chão SEM modificadores = Comando de Movimento
+        if (!isCtrl && !isShift)
+        {
+            // Disparar comando de movimento
+            GameEvents.RaiseMoveCommand(point);
+        }
+        else
+        {
+            // Click no chão COM Ctrl/Shift = Desselecionar (comportamento antigo)
+            GameEvents.RaiseGroundClick(point, isCtrl);
+        }
+
+        // Limpar estado de double click
+        _lastClickedUnit = null;
+        _lastClickTime = 0f;
+    }
+
+    // ============================================================
+    // PRIORIDADE 3 (FUTURO): INTERAÇÕES COM RECURSOS
+    // ============================================================
+    // Aqui você pode adicionar no futuro:
+    // - if (picker.TryPickTree(...)) → Cortar árvore
+    // - if (picker.TryPickRock(...)) → Minerar pedra
+    // - if (picker.TryPickEnemyUnit(...)) → Atacar
+    // Etc.
+}
+```
+
+> 🔁 O clique simples em terreno agora envia o evento de movimentação global, processado por `MovementCommandHandler`.
+
+---
+
+### 15.5 Próximos Passos
 
 **Melhorias Futuras:**
 - Shift+Click para range selection (usar `_rangeAnchor`)
