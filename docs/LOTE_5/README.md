@@ -1,3 +1,8 @@
+---
+layout: default
+title: LOTE 5 — USER INTERFACE / LEFT BAR
+permalink: /lote-5/
+---
 # LOTE 5 — USER INTERFACE / LEFT BAR
 
 **Versão:** 2.1 (Atualizada - Outubro 2025)  
